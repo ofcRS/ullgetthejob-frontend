@@ -1,406 +1,533 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { websocket } from '$lib/stores/websocket.svelte'
-
-  let selectedCVId: string | null = null
+  import { createEventDispatcher } from 'svelte'
+  
+  const dispatch = createEventDispatcher()
+  
+  const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws'
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+  
+  let ws: WebSocket | null = null
+  let connected = false
+  let jobs: any[] = []
+  let stats: any = null
   let applicationStatus: Record<string, string> = {}
-
+  let selectedCVId = ''
+  let error = ''
+  
+  // Props
+  export let filters = {}
+  export let autoApply = false
+  
   onMount(() => {
-    // Connect to WebSocket if not already connected
-    if (!websocket.connected) {
-      websocket.connect(import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws')
-    }
+    connectWebSocket()
   })
-
+  
   onDestroy(() => {
-    // WebSocket cleanup is handled by the store
+    disconnectWebSocket()
   })
-
+  
+  function connectWebSocket() {
+    try {
+      ws = new WebSocket(WS_URL)
+      
+      ws.onopen = () => {
+        connected = true
+        console.log('WebSocket connected')
+        
+        // Subscribe to job updates with filters
+        if (ws) {
+          ws.send(JSON.stringify({ 
+            type: 'subscribe', 
+            filters 
+          }))
+        }
+      }
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          
+          if (data.type === 'connected') {
+            console.log('Connected to job stream')
+          } else if (data.type === 'subscribed') {
+            console.log('Subscribed to job updates')
+          } else if (data.type === 'new_jobs') {
+            // Add new jobs to the stream
+            jobs = [...data.jobs, ...jobs].slice(0, 50) // Keep last 50 jobs
+            stats = data.stats
+          }
+        } catch (err) {
+          console.error('Failed to parse WebSocket message:', err)
+        }
+      }
+      
+      ws.onerror = (event) => {
+        console.error('WebSocket error:', event)
+        error = 'Connection error. Trying to reconnect...'
+      }
+      
+      ws.onclose = () => {
+        connected = false
+        console.log('WebSocket disconnected')
+        
+        // Attempt to reconnect after 5 seconds
+        setTimeout(() => {
+          if (!connected) {
+            connectWebSocket()
+          }
+        }, 5000)
+      }
+    } catch (err) {
+      console.error('Failed to connect WebSocket:', err)
+      error = 'Failed to connect to job stream'
+    }
+  }
+  
+  function disconnectWebSocket() {
+    if (ws) {
+      ws.close()
+      ws = null
+    }
+  }
+  
   async function applyToJob(job: any) {
     if (!selectedCVId) {
-      alert('Please select a CV first')
+      error = 'Please select a CV first'
       return
     }
-
+    
     try {
-      // Customize CV for this specific job
-      const customizedCV = await api.post('/custom-cvs', {
-        cvId: selectedCVId,
-        jobId: job.id,
-        jobTitle: job.title,
-        jobDescription: job.description,
-        company: job.company
+      const token = localStorage.getItem('auth_token')
+      
+      // First, customize CV for this job
+      const customCVResponse = await fetch(`${API_URL}/custom-cvs`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          cvId: selectedCVId,
+          jobId: job.id,
+          jobTitle: job.title,
+          jobDescription: job.description
+        })
       })
-
-      // Quick apply - enqueue the application
-      const application = await api.post('/applications', {
-        jobId: job.id,
-        customCvId: customizedCV.id,
-        jobExternalId: job.id,
-        coverLetter: customizedCV.coverLetter || ''
+      
+      if (!customCVResponse.ok) {
+        throw new Error('Failed to customize CV')
+      }
+      
+      const customCV = await customCVResponse.json()
+      
+      // Then submit application
+      const applicationResponse = await fetch(`${API_URL}/applications`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          jobId: job.id,
+          customCvId: customCV.id,
+          jobExternalId: job.id,
+          coverLetter: customCV.coverLetter
+        })
       })
-
+      
+      if (!applicationResponse.ok) {
+        throw new Error('Failed to submit application')
+      }
+      
+      const application = await applicationResponse.json()
       applicationStatus[job.id] = 'applied'
-      console.log('Application queued:', application)
-    } catch (error) {
-      console.error('Failed to apply to job:', error)
-      alert('Failed to apply to job. Please try again.')
+      applicationStatus = { ...applicationStatus } // Trigger reactivity
+      
+      dispatch('applied', { job, application })
+    } catch (err) {
+      console.error('Application error:', err)
+      error = err instanceof Error ? err.message : 'Failed to apply'
+      applicationStatus[job.id] = 'failed'
+      applicationStatus = { ...applicationStatus }
     }
   }
-
-  function formatSalary(salary: string | undefined): string {
-    if (!salary) return 'Not specified'
-    return salary
-  }
-
-  function formatDate(dateString: string | undefined): string {
-    if (!dateString) return ''
-    return new Date(dateString).toLocaleDateString()
-  }
-
-  function isTestRequired(job: any): boolean {
-    return job.has_test && job.test_required
+  
+  function formatDate(dateString: string) {
+    const date = new Date(dateString)
+    return date.toLocaleString()
   }
 </script>
 
 <div class="job-stream">
-  <div class="stream-header">
-    <h2>Live Job Feed</h2>
-    <div class="status-bar">
-      <span class="connection-status" class:connected={websocket.connected}>
-        {websocket.connected ? '● Live' : '○ Disconnected'}
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="status-left">
+      <span class="connection-status" class:connected>
+        {#if connected}
+          <span class="dot bg-green-500"></span> Live
+        {:else}
+          <span class="dot bg-red-500"></span> Disconnected
+        {/if}
       </span>
-      <span class="job-count">
-        {websocket.jobs.length} new jobs
-      </span>
+      {#if stats}
+        <span class="job-count">
+          {jobs.length} jobs • Updated {stats.timestamp ? formatDate(stats.timestamp) : 'recently'}
+        </span>
+      {/if}
     </div>
   </div>
-
-  {#if websocket.jobs.length === 0}
-    <div class="empty-state">
-      <div class="empty-icon">🔍</div>
-      <h3>No jobs yet</h3>
-      <p>Start a job search to see live updates here</p>
+  
+  {#if error}
+    <div class="error-banner">
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+      </svg>
+      <span>{error}</span>
+      <button on:click={() => error = ''} class="ml-auto">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+        </svg>
+      </button>
     </div>
-  {:else}
-    <div class="job-list">
-      {#each websocket.jobs as job (job.id)}
-        <div class="job-card" animate:flip={{ duration: 300 }}>
+  {/if}
+  
+  <!-- Job List -->
+  <div class="job-list">
+    {#if jobs.length === 0}
+      <div class="empty-state">
+        <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m8 0V8a2 2 0 01-2 2H8a2 2 0 01-2-2V6m8 0H8"></path>
+        </svg>
+        <p class="text-gray-600 text-lg">No jobs yet</p>
+        <p class="text-gray-500 text-sm mt-2">New jobs will appear here automatically</p>
+      </div>
+    {:else}
+      {#each jobs as job (job.id)}
+        <div class="job-card">
           <div class="job-header">
-            <h3>{job.title}</h3>
-            <div class="company-badge">{job.company}</div>
-          </div>
-
-          <div class="job-details">
-            <p class="salary">
-              <span class="label">Salary:</span>
-              {formatSalary(job.salary)}
-            </p>
-            <p class="location">
-              <span class="label">Location:</span>
-              {job.area}
-            </p>
-            {#if job.description}
-              <p class="description">
-                {job.description.length > 150 ? `${job.description.substring(0, 150)}...` : job.description}
-              </p>
+            <h3 class="job-title">{job.title}</h3>
+            {#if job.has_test && job.test_required}
+              <span class="test-badge">Test Required</span>
             {/if}
           </div>
-
+          
+          <p class="company">{job.company || 'Company not specified'}</p>
+          
+          <div class="job-details">
+            {#if job.salary}
+              <div class="detail-item">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>{job.salary}</span>
+              </div>
+            {/if}
+            {#if job.area}
+              <div class="detail-item">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <span>{job.area}</span>
+              </div>
+            {/if}
+          </div>
+          
           {#if job.skills && job.skills.length > 0}
             <div class="skills">
               {#each job.skills.slice(0, 5) as skill}
                 <span class="skill-tag">{skill}</span>
               {/each}
               {#if job.skills.length > 5}
-                <span class="skill-tag more">+{job.skills.length - 5} more</span>
+                <span class="skill-tag-more">+{job.skills.length - 5} more</span>
               {/if}
             </div>
           {/if}
-
-          {#if isTestRequired(job)}
+          
+          {#if job.has_test && job.test_required}
             <div class="warning">
-              ⚠️ Requires test assignment (cannot auto-apply)
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+              </svg>
+              <span>This job requires a test assignment (cannot auto-apply)</span>
             </div>
           {/if}
-
+          
           <div class="actions">
             {#if applicationStatus[job.id] === 'applied'}
-              <button class="applied-button" disabled>
-                ✓ Applied
+              <button class="btn-applied" disabled>
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+                Applied
               </button>
-            {:else if isTestRequired(job)}
-              <button class="disabled-button" disabled>
-                Cannot Auto-Apply
+            {:else if applicationStatus[job.id] === 'failed'}
+              <button class="btn-failed" on:click={() => applyToJob(job)}>
+                Retry
               </button>
+            {:else if job.has_test && job.test_required}
+              <a href={job.url} target="_blank" rel="noopener noreferrer" class="btn-secondary">
+                View on HH.ru
+              </a>
             {:else}
-              <button
-                class="apply-button"
-                on:click={() => applyToJob(job)}
-                disabled={!selectedCVId}
-              >
+              <button class="btn-primary" on:click={() => applyToJob(job)}>
                 Quick Apply
               </button>
+              <a href={job.url} target="_blank" rel="noopener noreferrer" class="btn-secondary">
+                View Details
+              </a>
             {/if}
-
-            <a
-              href={job.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="view-link"
-            >
-              View on HH.ru
-            </a>
           </div>
         </div>
       {/each}
-    </div>
-  {/if}
-
-  <div class="cv-selector">
-    <label for="cv-select">Select CV for Quick Apply:</label>
-    <select id="cv-select" bind:value={selectedCVId}>
-      <option value="">Choose your CV...</option>
-      <!-- This would be populated from API -->
-      <option value="cv1">Software Developer CV</option>
-      <option value="cv2">Full Stack Developer CV</option>
-    </select>
+    {/if}
   </div>
 </div>
 
 <style>
   .job-stream {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
   }
-
-  .stream-header {
-    padding: 1.5rem;
-    border-bottom: 1px solid #eee;
+  
+  .status-bar {
+    background-color: white;
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     display: flex;
     justify-content: space-between;
     align-items: center;
   }
-
-  .stream-header h2 {
-    margin: 0;
-    color: #333;
-  }
-
-  .status-bar {
+  
+  .status-left {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 1.5rem;
+  }
+  
+  .connection-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    color: #6b7280;
+  }
+  
+  .connection-status.connected {
+    color: #059669;
+  }
+  
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+  
+  .job-count {
+    color: #6b7280;
     font-size: 0.875rem;
   }
-
-  .connection-status {
-    color: #666;
+  
+  .error-banner {
+    background-color: #fee2e2;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #991b1b;
   }
-
-  .connection-status.connected {
-    color: #28a745;
+  
+  .job-list {
+    display: grid;
+    gap: 1.5rem;
   }
-
-  .job-count {
-    background: #f8f9fa;
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
-    color: #495057;
-  }
-
+  
   .empty-state {
     text-align: center;
-    padding: 3rem 1.5rem;
-    color: #6c757d;
+    padding: 4rem 2rem;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   }
-
-  .empty-icon {
-    font-size: 4rem;
-    margin-bottom: 1rem;
-    opacity: 0.5;
-  }
-
-  .job-list {
-    max-height: 600px;
-    overflow-y: auto;
-  }
-
+  
   .job-card {
+    background-color: white;
+    border-radius: 8px;
     padding: 1.5rem;
-    border-bottom: 1px solid #eee;
-    transition: background-color 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: all 0.2s ease;
   }
-
+  
   .job-card:hover {
-    background: #f8f9fa;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
   }
-
+  
   .job-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1rem;
+    align-items: start;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
   }
-
-  .job-header h3 {
+  
+  .job-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
     margin: 0;
-    color: #333;
-    font-size: 1.1rem;
-    line-height: 1.3;
   }
-
-  .company-badge {
-    background: #007bff;
-    color: white;
+  
+  .test-badge {
+    background-color: #fef3c7;
+    color: #92400e;
     padding: 0.25rem 0.75rem;
-    border-radius: 12px;
+    border-radius: 9999px;
     font-size: 0.75rem;
-    font-weight: 500;
+    font-weight: 600;
+    text-transform: uppercase;
+    white-space: nowrap;
   }
-
-  .job-details {
+  
+  .company {
+    color: #6b7280;
+    font-size: 1rem;
     margin-bottom: 1rem;
   }
-
-  .job-details p {
-    margin: 0.5rem 0;
-    color: #495057;
-    font-size: 0.9rem;
+  
+  .job-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
   }
-
-  .label {
-    font-weight: 500;
-    color: #333;
+  
+  .detail-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #4b5563;
+    font-size: 0.875rem;
   }
-
-  .description {
-    color: #6c757d;
-    line-height: 1.4;
-  }
-
+  
   .skills {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
     margin-bottom: 1rem;
   }
-
+  
   .skill-tag {
-    background: #e9ecef;
-    color: #495057;
-    padding: 0.25rem 0.5rem;
-    border-radius: 8px;
-    font-size: 0.75rem;
+    background-color: #dbeafe;
+    color: #1e40af;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 500;
   }
-
-  .skill-tag.more {
-    background: #ffc107;
-    color: #212529;
-  }
-
-  .warning {
-    background: #fff3cd;
-    color: #856404;
-    padding: 0.75rem;
-    border-radius: 4px;
-    border-left: 4px solid #ffc107;
-    margin-bottom: 1rem;
+  
+  .skill-tag-more {
+    background-color: #f3f4f6;
+    color: #6b7280;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
     font-size: 0.875rem;
   }
-
+  
+  .warning {
+    background-color: #fef3c7;
+    border: 1px solid #fbbf24;
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #92400e;
+    font-size: 0.875rem;
+  }
+  
   .actions {
     display: flex;
-    gap: 1rem;
-    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
   }
-
-  .apply-button,
-  .applied-button,
-  .disabled-button {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 4px;
-    font-size: 0.875rem;
+  
+  .btn-primary {
+    background-color: #3b82f6;
+    color: white;
+    padding: 0.5rem 1.5rem;
+    border-radius: 6px;
     font-weight: 500;
+    border: none;
     cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  
+  .btn-primary:hover {
+    background-color: #2563eb;
+  }
+  
+  .btn-secondary {
+    background-color: white;
+    color: #3b82f6;
+    padding: 0.5rem 1.5rem;
+    border-radius: 6px;
+    font-weight: 500;
+    border: 1px solid #3b82f6;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
     transition: all 0.2s ease;
   }
-
-  .apply-button {
-    background: #28a745;
+  
+  .btn-secondary:hover {
+    background-color: #eff6ff;
+  }
+  
+  .btn-applied {
+    background-color: #10b981;
     color: white;
-  }
-
-  .apply-button:hover:not(:disabled) {
-    background: #218838;
-  }
-
-  .apply-button:disabled {
-    background: #6c757d;
+    padding: 0.5rem 1.5rem;
+    border-radius: 6px;
+    font-weight: 500;
+    border: none;
     cursor: not-allowed;
-  }
-
-  .applied-button {
-    background: #28a745;
-    color: white;
-  }
-
-  .disabled-button {
-    background: #6c757d;
-    color: white;
-    cursor: not-allowed;
-  }
-
-  .view-link {
-    color: #007bff;
-    text-decoration: none;
-    font-size: 0.875rem;
-  }
-
-  .view-link:hover {
-    text-decoration: underline;
-  }
-
-  .cv-selector {
-    padding: 1rem 1.5rem;
-    background: #f8f9fa;
-    border-top: 1px solid #eee;
+    opacity: 0.8;
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.5rem;
   }
-
-  .cv-selector label {
+  
+  .btn-failed {
+    background-color: #ef4444;
+    color: white;
+    padding: 0.5rem 1.5rem;
+    border-radius: 6px;
     font-weight: 500;
-    color: #333;
-    margin: 0;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
   }
-
-  .cv-selector select {
-    padding: 0.5rem;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 0.875rem;
-  }
-
-  @media (max-width: 768px) {
-    .job-header {
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .actions {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .cv-selector {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 0.5rem;
-    }
+  
+  .btn-failed:hover {
+    background-color: #dc2626;
   }
 </style>
