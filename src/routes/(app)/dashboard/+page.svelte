@@ -3,6 +3,7 @@
   import { authStore, user } from '$lib/stores/auth.svelte'
 
   let currentUser: any = null
+  let searchQuery = ''
 
   // Subscribe to user state changes
   user.subscribe(value => currentUser = value)
@@ -17,7 +18,20 @@
       goto('/login')
     }
   }
+
+  function onSearchKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter' && searchQuery.trim().length > 0) {
+      goto(`/jobs?query=${encodeURIComponent(searchQuery.trim())}`)
+    }
+  }
 </script>
+
+<svelte:head>
+  <title>Dashboard • UllGetTheJob</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Your job application dashboard overview" />
+  <meta name="robots" content="noindex" />
+</svelte:head>
 
 <div class="min-h-screen bg-gray-50">
   <!-- Header -->
@@ -36,9 +50,23 @@
           <div class="text-sm text-gray-600">
             Welcome, <span class="font-medium text-gray-900">{currentUser?.name || currentUser?.email}</span>
           </div>
+          <div class="relative hidden md:block">
+            <input
+              bind:value={searchQuery}
+              on:keydown={onSearchKeydown}
+              type="search"
+              class="input pl-10 w-64"
+              placeholder="Search jobs..."
+              aria-label="Search jobs"
+            />
+            <svg class="pointer-events-none absolute left-3 top-2.5 h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          </div>
           <button
             on:click={logout}
             class="btn btn-danger"
+            aria-label="Logout"
           >
             <svg class="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
@@ -48,20 +76,32 @@
         </div>
       </div>
     </div>
+    <div class="border-t border-gray-100 bg-white">
+      <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" aria-label="Secondary Navigation">
+        <ul class="flex space-x-6 -mb-px overflow-x-auto">
+          <li>
+            <a href="/dashboard" class="inline-flex items-center py-3 text-sm font-medium border-b-2 border-blue-600 text-blue-600" aria-current="page">Overview</a>
+          </li>
+          <li>
+            <a href="/jobs" class="inline-flex items-center py-3 text-sm font-medium border-b-2 border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300">Jobs</a>
+          </li>
+        </ul>
+      </nav>
+    </div>
   </header>
 
   <!-- Main Content -->
   <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
     <div class="px-4 py-6 sm:px-0">
       <!-- Welcome Section -->
-      <div class="mb-8">
-        <h2 class="text-2xl font-bold text-gray-900 mb-2">Welcome back!</h2>
-        <p class="text-gray-600">Ready to find your next opportunity? Let's get started.</p>
+      <div class="mb-8 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 p-6 sm:p-8">
+        <h2 class="text-2xl font-bold text-blue-900 mb-2">Welcome back!</h2>
+        <p class="text-blue-700">Ready to find your next opportunity? Let's get started.</p>
       </div>
 
       <!-- Quick Stats -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div class="card">
+        <div class="card hover:shadow-md transition-shadow">
           <div class="flex items-center">
             <div class="p-2 bg-blue-100 rounded-lg">
               <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -75,7 +115,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card hover:shadow-md transition-shadow">
           <div class="flex items-center">
             <div class="p-2 bg-green-100 rounded-lg">
               <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -89,7 +129,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card hover:shadow-md transition-shadow">
           <div class="flex items-center">
             <div class="p-2 bg-yellow-100 rounded-lg">
               <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,7 +147,7 @@
       <!-- Action Cards -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <!-- Browse Jobs -->
-        <button class="card hover:shadow-md transition-shadow text-left w-full" on:click={() => goto('/jobs')}>
+        <button class="card hover:shadow-md transition-shadow text-left w-full group" on:click={() => goto('/jobs')} aria-label="Browse jobs">
           <div class="flex items-center mb-4">
             <div class="p-3 bg-blue-100 rounded-lg">
               <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -121,14 +161,14 @@
           </div>
           <div class="flex items-center text-blue-600 text-sm font-medium">
             <span>Start browsing</span>
-            <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="ml-2 h-4 w-4 transform transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
             </svg>
           </div>
         </button>
 
         <!-- Upload CV -->
-        <button class="card hover:shadow-md transition-shadow text-left w-full">
+        <button class="card hover:shadow-md transition-shadow text-left w-full group" aria-label="Upload CV">
           <div class="flex items-center mb-4">
             <div class="p-3 bg-green-100 rounded-lg">
               <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,14 +182,14 @@
           </div>
           <div class="flex items-center text-green-600 text-sm font-medium">
             <span>Upload now</span>
-            <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="ml-2 h-4 w-4 transform transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
             </svg>
           </div>
         </button>
 
         <!-- View Applications -->
-        <button class="card hover:shadow-md transition-shadow text-left w-full">
+        <button class="card hover:shadow-md transition-shadow text-left w-full group" aria-label="View applications">
           <div class="flex items-center mb-4">
             <div class="p-3 bg-purple-100 rounded-lg">
               <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,7 +203,7 @@
           </div>
           <div class="flex items-center text-purple-600 text-sm font-medium">
             <span>View details</span>
-            <svg class="ml-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="ml-2 h-4 w-4 transform transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
             </svg>
           </div>
