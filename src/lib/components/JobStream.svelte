@@ -1,16 +1,12 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
   import { createEventDispatcher } from 'svelte'
+  import { websocket } from '$lib/stores/websocket.svelte'
+  import { api } from '$lib/api/client'
   
   const dispatch = createEventDispatcher()
   
-  const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws'
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-  
-  let ws: WebSocket | null = null
   let connected = false
   let jobs: any[] = []
-  let stats: any = null
   let applicationStatus: Record<string, string> = {}
   let selectedCVId = ''
   let error = ''
@@ -19,76 +15,16 @@
   export let filters = {}
   export let autoApply = false
   
-  onMount(() => {
-    connectWebSocket()
-  })
+  // Local store bindings
+  const connectedStore = websocket.connected
+  const jobsStore = websocket.jobs
   
-  onDestroy(() => {
-    disconnectWebSocket()
-  })
+  $: connected = $connectedStore as boolean
+  $: jobs = $jobsStore as any[]
   
-  function connectWebSocket() {
-    try {
-      ws = new WebSocket(WS_URL)
-      
-      ws.onopen = () => {
-        connected = true
-        console.log('WebSocket connected')
-        
-        // Subscribe to job updates with filters
-        if (ws) {
-          ws.send(JSON.stringify({ 
-            type: 'subscribe', 
-            filters 
-          }))
-        }
-      }
-      
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          
-          if (data.type === 'connected') {
-            console.log('Connected to job stream')
-          } else if (data.type === 'subscribed') {
-            console.log('Subscribed to job updates')
-          } else if (data.type === 'new_jobs') {
-            // Add new jobs to the stream
-            jobs = [...data.jobs, ...jobs].slice(0, 50) // Keep last 50 jobs
-            stats = data.stats
-          }
-        } catch (err) {
-          console.error('Failed to parse WebSocket message:', err)
-        }
-      }
-      
-      ws.onerror = (event) => {
-        console.error('WebSocket error:', event)
-        error = 'Connection error. Trying to reconnect...'
-      }
-      
-      ws.onclose = () => {
-        connected = false
-        console.log('WebSocket disconnected')
-        
-        // Attempt to reconnect after 5 seconds
-        setTimeout(() => {
-          if (!connected) {
-            connectWebSocket()
-          }
-        }, 5000)
-      }
-    } catch (err) {
-      console.error('Failed to connect WebSocket:', err)
-      error = 'Failed to connect to job stream'
-    }
-  }
-  
-  function disconnectWebSocket() {
-    if (ws) {
-      ws.close()
-      ws = null
-    }
+  // Subscribe to new filters
+  $: if (filters && Object.keys(filters as Record<string, unknown>).length > 0) {
+    websocket.subscribe(filters as Record<string, unknown>)
   }
   
   async function applyToJob(job: any) {
@@ -98,49 +34,21 @@
     }
     
     try {
-      const token = localStorage.getItem('auth_token')
-      
-      // First, customize CV for this job
-      const customCVResponse = await fetch(`${API_URL}/custom-cvs`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          cvId: selectedCVId,
-          jobId: job.id,
-          jobTitle: job.title,
-          jobDescription: job.description
-        })
+      // First, customize CV
+      const customCV: any = await api.post('/custom-cvs', {
+        cvId: selectedCVId,
+        jobId: job.id,
+        jobTitle: job.title,
+        jobDescription: job.description
       })
-      
-      if (!customCVResponse.ok) {
-        throw new Error('Failed to customize CV')
-      }
-      
-      const customCV = await customCVResponse.json()
       
       // Then submit application
-      const applicationResponse = await fetch(`${API_URL}/applications`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          jobId: job.id,
-          customCvId: customCV.id,
-          jobExternalId: job.id,
-          coverLetter: customCV.coverLetter
-        })
+      const application: any = await api.post('/applications', {
+        jobId: job.id,
+        customCvId: customCV.id,
+        jobExternalId: job.id,
+        coverLetter: customCV.coverLetter
       })
-      
-      if (!applicationResponse.ok) {
-        throw new Error('Failed to submit application')
-      }
-      
-      const application = await applicationResponse.json()
       applicationStatus[job.id] = 'applied'
       applicationStatus = { ...applicationStatus } // Trigger reactivity
       
@@ -170,11 +78,9 @@
           <span class="dot bg-red-500"></span> Disconnected
         {/if}
       </span>
-      {#if stats}
-        <span class="job-count">
-          {jobs.length} jobs • Updated {stats.timestamp ? formatDate(stats.timestamp) : 'recently'}
-        </span>
-      {/if}
+      <span class="job-count">
+        {jobs.length} jobs
+      </span>
     </div>
   </div>
   

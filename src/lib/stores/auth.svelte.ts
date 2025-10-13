@@ -38,6 +38,16 @@ class AuthStore {
     }
   }
 
+  async register(email: string, password: string): Promise<void> {
+    try {
+      const response = await api.post('/auth/register', { email, password })
+      const { token, user: userData } = response
+      this.setAuth(token, userData)
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Register failed')
+    }
+  }
+
   async login(email: string, password: string): Promise<void> {
     try {
       const response = await api.post('/auth/login', { email, password })

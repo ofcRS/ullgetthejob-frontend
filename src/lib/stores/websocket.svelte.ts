@@ -1,11 +1,12 @@
 import { browser } from '$app/environment'
+import { writable, get } from 'svelte/store'
 
 type Job = Record<string, unknown>
 
 class WebSocketStore {
-  private ws: WebSocket | null = $state<WebSocket | null>(null)
-  connected = $state(false)
-  jobs = $state<Job[]>([])
+  private ws: WebSocket | null = null
+  connected = writable(false)
+  jobs = writable<Job[]>([])
   private reconnectTimeout: number | null = null
   private currentFilters: Record<string, unknown> = {}
 
@@ -15,7 +16,7 @@ class WebSocketStore {
 
     this.ws = new WebSocket(url)
     this.ws.onopen = () => {
-      this.connected = true
+      this.connected.set(true)
       // Resubscribe to filters if we had any
       if (Object.keys(this.currentFilters).length > 0) {
         this.subscribe(this.currentFilters)
@@ -32,7 +33,7 @@ class WebSocketStore {
     }
 
     this.ws.onclose = () => {
-      this.connected = false
+      this.connected.set(false)
       // Auto-reconnect after 5 seconds
       this.reconnectTimeout = window.setTimeout(() => {
         this.connect(url)
@@ -51,18 +52,18 @@ class WebSocketStore {
     }
     this.ws?.close()
     this.ws = null
-    this.connected = false
+    this.connected.set(false)
   }
 
   subscribe(filters: Record<string, unknown>) {
     this.currentFilters = filters
-    if (this.ws && this.connected) {
+    if (this.ws && get(this.connected)) {
       this.send({ type: 'subscribe', filters })
     }
   }
 
   private send(data: any) {
-    if (this.ws && this.connected) {
+    if (this.ws && get(this.connected)) {
       this.ws.send(JSON.stringify(data))
     }
   }
@@ -80,7 +81,7 @@ class WebSocketStore {
       case 'new_jobs':
         if (Array.isArray(data.jobs)) {
           // Add new jobs to the beginning, limit to 100 total
-          this.jobs = [...data.jobs, ...this.jobs].slice(0, 100)
+          this.jobs.update(current => [...data.jobs, ...current].slice(0, 100))
         }
         break
 

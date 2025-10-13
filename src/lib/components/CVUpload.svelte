@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte'
+  import { api } from '$lib/api/client'
   
   const dispatch = createEventDispatcher()
   
@@ -8,8 +9,6 @@
   let error = ''
   let parsedCV: any = null
   let dragover = false
-  
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
   
   async function handleUpload() {
     if (!files || files.length === 0) return
@@ -38,28 +37,8 @@
     error = ''
     
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('name', file.name)
-      
-      const token = localStorage.getItem('auth_token')
-      
-      const response = await fetch(`${API_URL}/cvs/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Upload failed')
-      }
-      
-      const result = await response.json()
+      const result = await api.uploadCV(file)
       parsedCV = result
-      
       dispatch('uploaded', { cv: result })
     } catch (err) {
       error = err instanceof Error ? err.message : 'Upload failed. Please try again.'

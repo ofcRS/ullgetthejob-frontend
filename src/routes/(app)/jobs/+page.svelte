@@ -14,8 +14,8 @@
     showCVUpload = false
   }
   
-  function handleSearchUpdate(event: CustomEvent) {
-    searchFilters = event.detail.filters
+  function handleSearchStarted(event: CustomEvent) {
+    searchFilters = event.detail.searchParams
   }
   
   function handleJobApplied(event: CustomEvent) {
@@ -110,7 +110,7 @@
       
       <!-- Search Filters -->
       <div class="mb-6">
-        <JobSearch on:search={handleSearchUpdate} bind:autoApply />
+        <JobSearch on:searchStarted={handleSearchStarted} bind:autoApply />
       </div>
       
       <!-- Job Stream -->

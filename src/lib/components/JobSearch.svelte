@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte'
   import { websocket } from '$lib/stores/websocket.svelte'
+  import { api } from '$lib/api/client'
 
   const dispatch = createEventDispatcher()
 
@@ -12,7 +13,7 @@
     schedule: 'remote'
   }
 
-  let autoApply = false
+  export let autoApply = false
   let maxApplications = 20
   let selectedCVId: string | null = null
   let isSearching = false
