@@ -25,6 +25,11 @@ export async function customizeCv(params: { cv: ParsedCV; jobDescription: string
   return await res.json()
 }
 
+export async function listCvs(): Promise<{ success: boolean; items?: any[]; error?: string }> {
+  const res = await fetch(`${API_URL}/api/cv`)
+  return await res.json()
+}
+
 export async function submitApplication(params: { jobExternalId: string; customizedCV: CustomizedCV; coverLetter: string }) {
   const res = await fetch(`${API_URL}/api/application/submit`, {
     method: 'POST',

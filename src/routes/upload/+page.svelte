@@ -2,9 +2,10 @@
   import { onMount } from 'svelte'
   import { uploadedCv, selectedModel } from '$lib/stores/cv.store'
   import type { ModelInfo } from '$lib/types'
-  import { uploadCv } from '$lib/api/cv.api'
+  import { uploadCv, listCvs } from '$lib/api/cv.api'
   import { connectWebSocket, clientId as clientIdStore, wsConnection } from '$lib/stores/ws.store'
   import { goto } from '$app/navigation'
+  import CVDisplay from '$lib/components/CVDisplay.svelte'
 
   export let data: { models: ModelInfo[] }
 
@@ -14,6 +15,8 @@
   let success = ''
   let isUploading = false
   let progressStage = ''
+  let uploadedCvs: Array<{ id: string; originalFilename?: string; createdAt?: string }> = []
+  let showPreview = false
   $: selected = models.find(m => m.id === $selectedModel)
 
   onMount(() => {
@@ -36,6 +39,17 @@
     return () => { unsub() }
   })
 
+  async function loadPreviousCVs() {
+    try {
+      const res = await listCvs()
+      if (res.success && res.items) {
+        uploadedCvs = res.items.map((r: any) => ({ id: r.id, originalFilename: r.originalFilename, createdAt: r.createdAt }))
+      }
+    } catch {}
+  }
+
+  loadPreviousCVs()
+
   async function handleFileUpload(e: Event) {
     const input = e.target as HTMLInputElement
     if (!input.files?.[0]) return
@@ -53,6 +67,8 @@
     if (res.success && res.cv) {
       uploadedCv.set(res.cv)
       success = 'CV uploaded and parsed successfully with AI!'
+      showPreview = true
+      await loadPreviousCVs()
       setTimeout(() => goto('/cv'), 400)
     } else {
       error = res.error || 'Upload failed'
@@ -91,6 +107,30 @@
   {#if isUploading}
     <p class="text-sm text-gray-600 mt-2">{progressStage || 'Uploading...'}</p>
   {/if}
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+    <div>
+      {#if uploadedCvs.length > 0}
+        <h3 class="font-semibold mb-2">Previously Uploaded CVs</h3>
+        <div class="space-y-2">
+          {#each uploadedCvs as cv}
+            <a class="text-blue-700 hover:underline text-sm" href={`/cv/${cv.id}`}>
+              {cv.originalFilename || cv.id}
+              {#if cv.createdAt}
+                <span class="text-gray-500"> – {new Date(cv.createdAt).toLocaleString()}</span>
+              {/if}
+            </a>
+          {/each}
+        </div>
+      {/if}
+    </div>
+    <div>
+      {#if showPreview && $uploadedCv}
+        <h3 class="font-semibold mb-2">Live Preview</h3>
+        <CVDisplay cv={$uploadedCv} />
+      {/if}
+    </div>
+  </div>
 
   {#if error}
     <p class="text-sm text-red-600 mt-2">{error}</p>

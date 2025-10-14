@@ -4,12 +4,12 @@ import type { ParsedCV, CustomizedCV } from '$lib/types'
 function persisted<T>(key: string, initial: T) {
   const store = writable<T>(initial)
   if (typeof window !== 'undefined') {
-    const raw = localStorage.getItem(key)
+    const raw = sessionStorage.getItem(key)
     if (raw) {
       try { store.set(JSON.parse(raw)) } catch {}
     }
     store.subscribe((v) => {
-      try { localStorage.setItem(key, JSON.stringify(v)) } catch {}
+      try { sessionStorage.setItem(key, JSON.stringify(v)) } catch {}
     })
   }
   return store

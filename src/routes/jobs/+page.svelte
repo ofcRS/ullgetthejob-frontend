@@ -49,13 +49,13 @@
   {:else if !$selectedJob}
     <p class="text-gray-600">No job selected. <a href="/search" class="text-blue-600">Search jobs</a>.</p>
   {:else}
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-      <div class="card bg-white">
-        <h3 class="font-semibold mb-3 border-b pb-2">Your CV</h3>
+    <div class="customize-grid mb-6">
+      <div class="column-card">
+        <h3 class="font-semibold mb-3 border-b pb-2 sticky top-0 bg-white z-10">Your CV</h3>
         <CVDisplay cv={$uploadedCv} />
       </div>
-      <div class="card bg-blue-50">
-        <h3 class="font-semibold mb-3 border-b border-blue-200 pb-2">{ $selectedJob.title }</h3>
+      <div class="column-card bg-blue-50">
+        <h3 class="font-semibold mb-3 border-b border-blue-200 pb-2 sticky top-0 bg-blue-50 z-10">{ $selectedJob.title }</h3>
         <p class="text-sm text-gray-700 whitespace-pre-wrap">{ $selectedJob.description }</p>
         {#if jobSkills.length}
           <div class="mt-3">
@@ -68,8 +68,8 @@
           </div>
         {/if}
       </div>
-      <div class="card { $customizedCv ? 'bg-green-50' : 'bg-gray-50' }">
-        <h3 class="font-semibold mb-3 border-b pb-2">Customized CV</h3>
+      <div class="column-card { $customizedCv ? 'bg-green-50' : 'bg-gray-50' }">
+        <h3 class="font-semibold mb-3 border-b pb-2 sticky top-0 bg-inherit z-10">Customized CV</h3>
         {#if $customizedCv}
           <CVDisplay cv={$customizedCv} />
           {#if matchCalc}

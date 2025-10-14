@@ -2,6 +2,8 @@
   import { jobs, isSearching, selectedJob } from '$lib/stores/jobs.store'
   import JobCard from '$lib/components/JobCard.svelte'
   import { searchJobs } from '$lib/api/jobs.api'
+  import { uploadedCv } from '$lib/stores/cv.store'
+  import { goto } from '$app/navigation'
 
   let query = ''
   let area = '1'
@@ -20,6 +22,17 @@
     }
     isSearching.set(false)
   }
+
+  $: selectedCvInfo = $uploadedCv ? {
+    name: `${$uploadedCv.firstName || ''} ${$uploadedCv.lastName || ''}`.trim(),
+    title: $uploadedCv.title,
+    skillCount: $uploadedCv.skills?.length || 0
+  } : null
+
+  function chooseJob(job: any) {
+    selectedJob.set(job)
+    goto('/jobs')
+  }
 </script>
 
 <div class="container mx-auto px-4 py-8 max-w-screen-2xl">
@@ -37,13 +50,25 @@
     </button>
   </div>
 
+  {#if selectedCvInfo}
+    <div class="bg-blue-50 p-4 rounded-lg mb-6 mt-4">
+      <p class="text-sm text-gray-700">
+        Searching for: <strong>{selectedCvInfo.name || 'Unnamed'}</strong>
+        {#if selectedCvInfo.title}
+          ({selectedCvInfo.title})
+        {/if}
+        • {selectedCvInfo.skillCount} skills
+      </p>
+    </div>
+  {/if}
+
   {#if error}
     <p class="text-sm text-red-600 mt-3">{error}</p>
   {/if}
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
     {#each $jobs as job}
-      <button on:click={() => selectedJob.set(job)}>
+      <button on:click={() => chooseJob(job)}>
         <JobCard {job} />
       </button>
     {/each}
