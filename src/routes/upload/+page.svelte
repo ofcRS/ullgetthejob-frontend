@@ -4,6 +4,7 @@
   import type { ModelInfo } from '$lib/types'
   import { uploadCv } from '$lib/api/cv.api'
   import { connectWebSocket, clientId as clientIdStore, wsConnection } from '$lib/stores/ws.store'
+  import { goto } from '$app/navigation'
 
   export let data: { models: ModelInfo[] }
 
@@ -52,6 +53,7 @@
     if (res.success && res.cv) {
       uploadedCv.set(res.cv)
       success = 'CV uploaded and parsed successfully with AI!'
+      setTimeout(() => goto('/cv'), 400)
     } else {
       error = res.error || 'Upload failed'
     }

@@ -1,9 +1,23 @@
 import { writable } from 'svelte/store'
 import type { ParsedCV, CustomizedCV } from '$lib/types'
 
-export const uploadedCv = writable<ParsedCV | null>(null)
-export const customizedCv = writable<CustomizedCV | null>(null)
-export const coverLetter = writable<string>('')
-export const selectedModel = writable<string>('anthropic/claude-3.5-sonnet')
+function persisted<T>(key: string, initial: T) {
+  const store = writable<T>(initial)
+  if (typeof window !== 'undefined') {
+    const raw = localStorage.getItem(key)
+    if (raw) {
+      try { store.set(JSON.parse(raw)) } catch {}
+    }
+    store.subscribe((v) => {
+      try { localStorage.setItem(key, JSON.stringify(v)) } catch {}
+    })
+  }
+  return store
+}
+
+export const uploadedCv = persisted<ParsedCV | null>('ugtj_uploadedCv', null)
+export const customizedCv = persisted<CustomizedCV | null>('ugtj_customizedCv', null)
+export const coverLetter = persisted<string>('ugtj_coverLetter', '')
+export const selectedModel = persisted<string>('ugtj_selectedModel', 'anthropic/claude-3.5-sonnet')
 
 

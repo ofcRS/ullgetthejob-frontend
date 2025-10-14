@@ -1,6 +1,12 @@
 <script lang="ts">
   import { uploadedCv } from '$lib/stores/cv.store'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
+  import { onMount } from 'svelte'
+  import { goto } from '$app/navigation'
+
+  onMount(() => {
+    if (!$uploadedCv) goto('/upload')
+  })
 </script>
 
 <div class="container mx-auto px-4 py-8 max-w-screen-2xl">

@@ -41,7 +41,9 @@
 
 <div class="container mx-auto px-4 py-8 max-w-screen-2xl">
   <h1 class="text-3xl font-bold mb-4">Customize</h1>
-
+  {#if !$uploadedCv}
+    <p class="text-gray-600">You need to upload a CV first. <a href="/upload" class="text-blue-600">Go to upload</a>.</p>
+  {/if}
   {#if !$uploadedCv}
     <p class="text-gray-600">No CV uploaded yet. <a href="/upload" class="text-blue-600">Upload now</a>.</p>
   {:else if !$selectedJob}
