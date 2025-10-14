@@ -6,6 +6,8 @@
   import { connectWebSocket, clientId as clientIdStore, wsConnection } from '$lib/stores/ws.store'
   import { goto } from '$app/navigation'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
+  
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
   export let data: { models: ModelInfo[] }
 
@@ -17,12 +19,14 @@
   let progressStage = ''
   let uploadedCvs: Array<{ id: string; originalFilename?: string; createdAt?: string }> = []
   let showPreview = false
+  let hhConnected = false
+  let hhResumes: any[] = []
+  let isImporting = false
   $: selected = models.find(m => m.id === $selectedModel)
 
   onMount(() => {
     models = data.models
-    const api = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-    const wsUrl = api.replace('http', 'ws') + '/ws'
+    const wsUrl = API.replace('http', 'ws') + '/ws'
     const id = crypto.randomUUID()
     connectWebSocket(wsUrl, id)
     const unsub = wsConnection.subscribe((ws) => {
@@ -49,6 +53,52 @@
   }
 
   loadPreviousCVs()
+
+  async function checkHHStatus() {
+    try {
+      const res = await fetch(`${API}/api/auth/hh/status`)
+      const data = await res.json()
+      hhConnected = !!data.connected
+      if (hhConnected) await loadHHResumes()
+    } catch {}
+  }
+
+  async function loadHHResumes() {
+    try {
+      const res = await fetch(`${API}/api/hh/resumes`)
+      const data = await res.json()
+      if (data.success) hhResumes = data.items || []
+    } catch {}
+  }
+
+  checkHHStatus()
+
+  async function connectHH() {
+    const res = await fetch(`${API}/api/auth/hh/login`)
+    const data = await res.json()
+    if (data?.url) {
+      window.location.href = data.url
+    }
+  }
+
+  async function importFromHH(resumeId: string) {
+    try {
+      isImporting = true
+      const res = await fetch(`${API}/api/cv/import/hh/${resumeId}`, { method: 'POST' })
+      const data = await res.json()
+      if (data.success && data.cv) {
+        uploadedCv.set(data.cv)
+        showPreview = true
+        success = 'Imported resume from HH.ru successfully!'
+      } else {
+        error = data.error || 'Failed to import resume'
+      }
+    } catch (e) {
+      error = 'Network error during import'
+    } finally {
+      isImporting = false
+    }
+  }
 
   async function handleFileUpload(e: Event) {
     const input = e.target as HTMLInputElement
@@ -110,6 +160,27 @@
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
     <div>
+      <div class="mb-4">
+        <h3 class="font-semibold mb-2">HH.ru</h3>
+        {#if hhConnected}
+          <p class="text-sm text-green-700">Connected</p>
+          {#if hhResumes.length}
+            <p class="text-sm text-gray-700 mt-2">Your resumes:</p>
+            <ul class="list-disc ml-5 mt-1">
+              {#each hhResumes as r}
+                <li class="text-sm flex items-center gap-2">
+                  <span class="flex-1">{r.title || r.id}</span>
+                  <button class="btn btn-secondary text-xs" disabled={isImporting} on:click={() => importFromHH(r.id)}>
+                    {isImporting ? 'Importing...' : 'Import'}
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        {:else}
+          <button class="btn btn-secondary" on:click={connectHH}>Connect HH.ru</button>
+        {/if}
+      </div>
       {#if uploadedCvs.length > 0}
         <h3 class="font-semibold mb-2">Previously Uploaded CVs</h3>
         <div class="space-y-2">

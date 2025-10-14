@@ -14,7 +14,7 @@
 - 🔄 **Real-time updates** and reactive state management
 - 📱 **Responsive design** for all devices
 - 🎯 **Type-safe** with TypeScript
-- 🚀 **Optimized builds** with Vite
+- 🧭 **Auto-navigation** and progress-aware flow
 
 ---
 
@@ -30,11 +30,6 @@
 ---
 
 ## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js 18+ or Bun
-- pnpm (recommended) or npm
 
 ### Installation
 
@@ -85,9 +80,13 @@ pnpm install
 ```
 src/
 ├── lib/             # Shared components & utilities
+│   ├── components/  # CVDisplay, CVDiff, etc
+│   ├── stores/      # app, cv, jobs stores
 │   └── ...
 ├── routes/          # SvelteKit file-based routing
-│   └── ...
+│   ├── upload/      # CV upload + history + preview
+│   ├── search/      # Job search + CV context bar
+│   └── jobs/        # Three-column customize view
 ├── app.css          # Global styles with Tailwind
 └── app.html         # HTML template
 ```
@@ -96,39 +95,27 @@ src/
 
 ## 🎨 Features
 
-- ✅ **Responsive design** optimized for mobile & desktop
-- ✅ **Dark mode support** (if implemented)
-- ✅ **Form validation** with type-safe inputs
-- ✅ **Optimistic UI updates** for better UX
-- ✅ **SvelteKit routing** with file-based organization
-- ✅ **Tailwind utility classes** for rapid styling
+- ✅ **Three-column customize layout** (CV | Job | Customized)
+- ✅ **Sticky columns** and responsive grid
+- ✅ **Diff highlighting** for customized CV changes
+- ✅ **Auto-navigation** after key actions
+- ✅ **CV history and live preview on upload**
+- ✅ **CV context bar on search**
+
+Env vars:
+```
+VITE_API_URL=http://localhost:3000
+VITE_WS_URL=ws://localhost:3000/ws
+VITE_ORCHESTRATOR_URL=http://localhost:4000
+```
 
 ---
 
-## 🧪 Development
+## 🔗 HH.ru Connect (MVP)
 
-### Environment Variables
-
-Create a `.env` file:
-
-```env
-VITE_API_URL=http://localhost:3000
-```
-
-### Styling with Tailwind
-
-This project uses Tailwind CSS for styling. Customize your theme in `tailwind.config.js`:
-
-```js
-// tailwind.config.js
-export default {
-  theme: {
-    extend: {
-      // Your custom theme
-    }
-  }
-}
-```
+- A "Connect HH.ru" flow is being integrated via API → Core OAuth
+- Proxy endpoint: `GET /api/auth/hh/login` returns `{ url, state }`
+- Frontend should redirect user to the provided `url`
 
 ---
 
@@ -148,16 +135,16 @@ The build output will be in the `build/` directory.
 
 ## 📖 Learn More
 
-- [SvelteKit Documentation](https://kit.svelte.dev/docs)
-- [Svelte Tutorial](https://svelte.dev/tutorial)
-- [Tailwind CSS](https://tailwindcss.com/docs)
-- [TypeScript](https://www.typescriptlang.org)
+- SvelteKit Documentation
+- Svelte Tutorial
+- Tailwind CSS
+- TypeScript
 
 ---
 
 ## 📄 License
 
-MIT License - Copyright (c) 2025 Aleksandr Sakhatskiy
+MIT License © 2025 Aleksandr Sakhatskiy
 
 ---
 

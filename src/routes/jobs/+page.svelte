@@ -4,6 +4,7 @@
   import { customizeCv } from '$lib/api/cv.api'
   import CoverLetterEditor from '$lib/components/CoverLetterEditor.svelte'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
+  import CVDiff from '$lib/components/CVDiff.svelte'
 
   let isGenerating = false
   let error = ''
@@ -84,6 +85,9 @@
               {/if}
             </div>
           {/if}
+          <div class="mt-4">
+            <CVDiff original={$uploadedCv} customized={$customizedCv} />
+          </div>
         {:else}
           <p class="text-gray-500">Not generated yet</p>
         {/if}
