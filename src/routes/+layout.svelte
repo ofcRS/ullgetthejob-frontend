@@ -2,6 +2,7 @@
   import '../app.css'
   import StepIndicator from '$lib/components/StepIndicator.svelte'
   import { page } from '$app/stores'
+  import GlobalSettings from '$lib/components/GlobalSettings.svelte'
 
   $: currentStep = (() => {
     const p = $page.url.pathname
@@ -18,4 +19,5 @@
     <StepIndicator {currentStep} />
     <slot />
   </div>
+  <GlobalSettings />
   </div>

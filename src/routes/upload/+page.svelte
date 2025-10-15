@@ -133,26 +133,7 @@
     <p class="text-lg md:text-xl text-gray-600">Upload your CV and let AI create personalized applications in minutes</p>
   </div>
 
-  <label class="label" for="model-select">AI Model</label>
-  <select id="model-select" bind:value={$selectedModel} class="input w-full mb-2">
-    {#each models as model}
-      <option value={model.id}>{model.name} ({model.provider})</option>
-    {/each}
-  </select>
-  {#if selected}
-    <div class="text-xs text-gray-600 mb-4">
-      <p><span class="font-medium">Selected:</span> {selected.name} ({selected.provider})</p>
-      {#if selected.description}
-        <p class="mt-1">{selected.description}</p>
-      {/if}
-      {#if selected.pricing}
-        <div class="mt-1">
-          <span class="font-medium">Pricing:</span>
-          <span class="ml-1">{JSON.stringify(selected.pricing)}</span>
-        </div>
-      {/if}
-    </div>
-  {/if}
+  <!-- Model selection moved to Global Settings -->
 
   <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-6">
     <div class="group relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 border-2 border-dashed border-blue-200 hover:border-blue-500 hover:shadow-xl transition-all duration-300 cursor-pointer" on:click={() => fileInput?.click()} role="button" tabindex="0" aria-label="Upload CV from computer" on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && fileInput?.click()}>

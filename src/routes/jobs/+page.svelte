@@ -4,13 +4,13 @@
   import { customizeCv } from '$lib/api/cv.api'
   import CoverLetterEditor from '$lib/components/CoverLetterEditor.svelte'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
-  import CVDiff from '$lib/components/CVDiff.svelte'
-  import CVDisplayWithDiff from '$lib/components/CVDisplayWithDiff.svelte'
+  import DiffModal from '$lib/components/DiffModal.svelte'
 
   let isGenerating = false
   let error = ''
   let success = ''
   let jobSkills: any = null
+  let showDiffModal = false
 
   // Extract all skills from structured response or handle flat array
   $: allJobSkills = (() => {
@@ -191,11 +191,24 @@
         </div>
       </div>
 
-      <!-- Column 3: Customized CV -->
+      <!-- Column 3: Customized CV (Redesigned) -->
       <div class="lg:col-span-4">
         <div class="column-card {$customizedCv ? 'bg-emerald-50' : 'bg-gray-100'}">
           <div class="sticky top-0 pb-3 border-b mb-4 z-10 {$customizedCv ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-100 border-gray-200'}">
-            <h3 class="font-semibold text-lg">Customized CV</h3>
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="font-semibold text-lg">Customized CV</h3>
+              {#if $customizedCv}
+                <button 
+                  on:click={() => showDiffModal = true}
+                  class="text-sm px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded-md font-medium transition-colors flex items-center gap-1"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Show Changes
+                </button>
+              {/if}
+            </div>
             {#if matchCalc}
               <div class="flex items-center gap-2 mt-2">
                 <div class="flex-1 h-2 bg-white rounded-full overflow-hidden">
@@ -206,11 +219,7 @@
             {/if}
           </div>
           {#if $customizedCv}
-            <CVDisplayWithDiff original={$uploadedCv} customized={$customizedCv} />
-            <div class="mt-6 p-4 bg-white rounded-xl border border-emerald-200">
-              <h4 class="font-semibold text-sm mb-3">Changes Made</h4>
-              <CVDiff original={$uploadedCv} customized={$customizedCv} />
-            </div>
+            <CVDisplay cv={$customizedCv} />
           {:else}
             <div class="text-center py-12">
               <p class="text-gray-500">Click Generate to customize</p>
@@ -258,6 +267,15 @@
     </div>
   {/if}
 </div>
+
+{#if $customizedCv && $uploadedCv}
+  <DiffModal 
+    original={$uploadedCv} 
+    customized={$customizedCv}
+    isOpen={showDiffModal}
+    on:close={() => showDiffModal = false}
+  />
+{/if}
 
 <style>
   /* Ensure smooth scrolling for sticky columns */
