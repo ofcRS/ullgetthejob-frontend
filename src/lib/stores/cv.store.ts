@@ -34,4 +34,9 @@ export const customizedCv = persisted<CustomizedCV | null>('ugtj_customizedCv', 
 export const coverLetter = persisted<string>('ugtj_coverLetter', '')
 export const selectedModel = persistedLocal<string>('ugtj_selectedModel', 'anthropic/claude-3.5-sonnet')
 
+export function clearCustomization() {
+  customizedCv.set(null)
+  coverLetter.set('')
+}
+
 

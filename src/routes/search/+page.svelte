@@ -2,7 +2,7 @@
   import { jobs, isSearching, selectedJob } from '$lib/stores/jobs.store'
   import JobCard from '$lib/components/JobCard.svelte'
   import { searchJobs } from '$lib/api/jobs.api'
-  import { uploadedCv } from '$lib/stores/cv.store'
+  import { uploadedCv, clearCustomization } from '$lib/stores/cv.store'
   import { goto } from '$app/navigation'
 
   let query = ''
@@ -30,6 +30,7 @@
   } : null
 
   function chooseJob(job: any) {
+    clearCustomization()
     selectedJob.set(job)
     goto('/jobs')
   }

@@ -5,12 +5,18 @@
   import CoverLetterEditor from '$lib/components/CoverLetterEditor.svelte'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
   import DiffModal from '$lib/components/DiffModal.svelte'
+  import type { ParsedCV, CustomizedCV } from '$lib/types'
 
   let isGenerating = false
   let error = ''
   let success = ''
   let jobSkills: any = null
   let showDiffModal = false
+  let customizedForJobId: string | null = null
+
+  // Typed non-null views guarded by UI conditions
+  $: uploadedCvNN = $uploadedCv as ParsedCV
+  $: customizedCvNN = $customizedCv as CustomizedCV
 
   // Extract all skills from structured response or handle flat array
   $: allJobSkills = (() => {
@@ -24,8 +30,10 @@
     return [...new Set(skills)]
   })()
 
+  $: isCurrentJobCustomization = $customizedCv && $selectedJob && customizedForJobId === $selectedJob.id
+
   $: matchCalc = (() => {
-    if (allJobSkills.length && $customizedCv?.skills?.length) {
+    if (isCurrentJobCustomization && allJobSkills.length && $customizedCv?.skills?.length) {
       const jobSet = new Set(allJobSkills.map((s) => s.toLowerCase()))
       const cvSet = new Set(($customizedCv.skills || []).map((s) => s.toLowerCase()))
       const match = [...jobSet].filter((s) => cvSet.has(s))
@@ -46,10 +54,18 @@
       coverLetter.set(res.coverLetter || '')
       success = `Generated with ${res.modelUsed}!`
       jobSkills = res.jobSkills || null
+      customizedForJobId = $selectedJob.id
     } else {
       error = res.error || 'Generation failed'
     }
     isGenerating = false
+  }
+
+  $: if ($selectedJob && customizedForJobId && customizedForJobId !== $selectedJob.id) {
+    customizedCv.set(null)
+    coverLetter.set('')
+    jobSkills = null
+    customizedForJobId = null
   }
 </script>
 
@@ -71,11 +87,11 @@
             <h3 class="font-semibold text-lg">Your Original CV</h3>
             <p class="text-sm text-gray-600">Uploaded version</p>
           </div>
-          <CVDisplay cv={$uploadedCv} />
+          <CVDisplay cv={uploadedCvNN} />
         </div>
       </div>
 
-      <!-- Column 2: Job Description -->
+      <!-- Column 2: Job Description (with skills) -->
       <div class="lg:col-span-4">
         <div class="column-card bg-blue-50">
           <div class="sticky top-0 bg-blue-50 pb-3 border-b border-blue-200 mb-4 z-10">
@@ -95,86 +111,24 @@
           </div>
           
           <div class="space-y-6">
-            <!-- Structured Job Skills -->
-            {#if jobSkills && (jobSkills.required?.length || jobSkills.preferred?.length || jobSkills.tools?.length || jobSkills.frameworks?.length)}
-              <div class="space-y-4">
-                {#if jobSkills.required?.length}
-                  <div class="p-4 bg-white rounded-xl border-2 border-red-200">
-                    <h4 class="font-semibold text-sm text-gray-900 mb-3 flex items-center gap-2">
-                      <span class="w-2 h-2 bg-red-500 rounded-full"></span>
-                      Required Skills
-                    </h4>
-                    <div class="flex flex-wrap gap-2">
-                      {#each jobSkills.required as skill}
-                        <span class="px-3 py-1.5 bg-red-50 text-red-800 border border-red-200 rounded-md text-xs font-medium">{skill}</span>
-                      {/each}
-                    </div>
-                  </div>
-                {/if}
-
-                {#if jobSkills.preferred?.length}
-                  <div class="p-4 bg-white rounded-xl border border-blue-200">
-                    <h4 class="font-semibold text-sm text-gray-900 mb-3 flex items-center gap-2">
-                      <span class="w-2 h-2 bg-blue-500 rounded-full"></span>
-                      Preferred Skills
-                    </h4>
-                    <div class="flex flex-wrap gap-2">
-                      {#each jobSkills.preferred as skill}
-                        <span class="px-3 py-1.5 bg-blue-50 text-blue-800 border border-blue-200 rounded-md text-xs font-medium">{skill}</span>
-                      {/each}
-                    </div>
-                  </div>
-                {/if}
-
-                {#if jobSkills.tools?.length}
-                  <div class="p-4 bg-white rounded-xl border border-gray-200">
-                    <h4 class="font-semibold text-sm text-gray-900 mb-3 flex items-center gap-2">
-                      <span class="w-2 h-2 bg-gray-500 rounded-full"></span>
-                      Tools & Platforms
-                    </h4>
-                    <div class="flex flex-wrap gap-2">
-                      {#each jobSkills.tools as skill}
-                        <span class="px-3 py-1.5 bg-gray-50 text-gray-700 border border-gray-200 rounded-md text-xs font-medium">{skill}</span>
-                      {/each}
-                    </div>
-                  </div>
-                {/if}
-
-                {#if jobSkills.frameworks?.length}
-                  <div class="p-4 bg-white rounded-xl border border-purple-200">
-                    <h4 class="font-semibold text-sm text-gray-900 mb-3 flex items-center gap-2">
-                      <span class="w-2 h-2 bg-purple-500 rounded-full"></span>
-                      Frameworks
-                    </h4>
-                    <div class="flex flex-wrap gap-2">
-                      {#each jobSkills.frameworks as skill}
-                        <span class="px-3 py-1.5 bg-purple-50 text-purple-800 border border-purple-200 rounded-md text-xs font-medium">{skill}</span>
-                      {/each}
-                    </div>
-                  </div>
-                {/if}
-              </div>
-            {:else if allJobSkills.length > 0}
-              <!-- Fallback for flat array -->
-              <div class="p-4 bg-white rounded-xl border border-blue-200">
-                <h4 class="font-semibold text-sm text-gray-900 mb-3">Required Skills</h4>
+            {#if allJobSkills.length}
+              <section>
+                <h4 class="font-semibold text-sm mb-2 text-gray-900">Required Skills</h4>
                 <div class="flex flex-wrap gap-2">
                   {#each allJobSkills as skill}
-                    <span class="px-3 py-1.5 bg-blue-100 text-blue-800 rounded-md text-xs font-medium">{skill}</span>
+                    {@const isMatched = $customizedCv?.skills?.some(s => s.toLowerCase() === skill.toLowerCase())}
+                    <span class="px-2 py-1 rounded text-xs font-medium {isMatched ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300' : 'bg-red-100 text-red-800'}">{skill}</span>
                   {/each}
                 </div>
-              </div>
+              </section>
             {/if}
 
-            <!-- Job Description -->
-            <div class="bg-white rounded-xl p-4">
-              <h4 class="font-semibold mb-3 text-sm text-gray-900">Job Description</h4>
+            <section>
+              <h4 class="font-semibold text-sm mb-2 text-gray-900">Job Description</h4>
               <div class="prose prose-sm max-w-none">
-                <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {$selectedJob.description}
-                </div>
+                <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{$selectedJob.description}</div>
               </div>
-            </div>
+            </section>
 
             <!-- External Link -->
             {#if $selectedJob.url}
@@ -184,20 +138,20 @@
                 rel="noopener noreferrer"
                 class="block w-full text-center px-4 py-2 bg-white border-2 border-blue-200 hover:border-blue-400 text-blue-600 hover:text-blue-700 rounded-lg text-sm font-medium transition-colors"
               >
-                View on HH.ru ↗
+                View Original Posting ↗
               </a>
             {/if}
           </div>
         </div>
       </div>
 
-      <!-- Column 3: Customized CV (Redesigned) -->
+      <!-- Column 3: Customized CV (job-aware) -->
       <div class="lg:col-span-4">
-        <div class="column-card {$customizedCv ? 'bg-emerald-50' : 'bg-gray-100'}">
-          <div class="sticky top-0 pb-3 border-b mb-4 z-10 {$customizedCv ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-100 border-gray-200'}">
+        <div class="column-card {isCurrentJobCustomization ? 'bg-emerald-50' : 'bg-gray-100'}">
+          <div class="sticky top-0 pb-3 border-b mb-4 z-10 {isCurrentJobCustomization ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-100 border-gray-200'}">
             <div class="flex items-center justify-between mb-2">
               <h3 class="font-semibold text-lg">Customized CV</h3>
-              {#if $customizedCv}
+              {#if isCurrentJobCustomization}
                 <button 
                   on:click={() => showDiffModal = true}
                   class="text-sm px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded-md font-medium transition-colors flex items-center gap-1"
@@ -218,11 +172,32 @@
               </div>
             {/if}
           </div>
-          {#if $customizedCv}
-            <CVDisplay cv={$customizedCv} />
+          {#if isCurrentJobCustomization}
+            <CVDisplay cv={customizedCvNN} />
+          {:else if $customizedCv}
+            <div class="text-center py-12">
+              <div class="mb-4 text-4xl">🔄</div>
+              <p class="text-gray-700 font-medium mb-2">CV from different job</p>
+              <p class="text-sm text-gray-500 mb-4">This customization is for a different job position.</p>
+              <button 
+                on:click={generate}
+                class="btn btn-primary"
+                disabled={isGenerating}
+              >
+                {isGenerating ? 'Generating...' : 'Generate for This Job'}
+              </button>
+            </div>
           {:else}
             <div class="text-center py-12">
-              <p class="text-gray-500">Click Generate to customize</p>
+              <div class="mb-4 text-4xl">✨</div>
+              <p class="text-gray-500 mb-4">Click Generate to customize your CV for this job</p>
+              <button 
+                on:click={generate}
+                class="btn btn-primary"
+                disabled={isGenerating}
+              >
+                {isGenerating ? 'Generating...' : 'Generate Customized CV'}
+              </button>
             </div>
           {/if}
         </div>
@@ -230,7 +205,7 @@
     </div>
 
     <!-- Cover Letter Section -->
-    {#if $coverLetter}
+    {#if isCurrentJobCustomization && $coverLetter}
       <div class="card bg-white mb-8">
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-semibold text-lg">Cover Letter</h3>
@@ -248,16 +223,18 @@
             <span class="text-red-600">❌ {error}</span>
           {:else if success}
             <span class="text-emerald-600">✓ {success}</span>
-          {:else if $customizedCv}
+          {:else if isCurrentJobCustomization}
             <span class="text-emerald-600">✓ Ready to apply</span>
+          {:else if $customizedCv}
+            <span class="text-amber-600">⚠️ CV is for a different job</span>
           {/if}
         </div>
         <div class="flex items-center gap-3">
           <button class="btn btn-secondary">Save Draft</button>
-          <button class="btn btn-primary" disabled={isGenerating} on:click={generate}>
-            {isGenerating ? 'Generating...' : ($customizedCv ? 'Regenerate' : 'Generate Customization')}
+          <button class="btn btn-primary" disabled={isGenerating || !$uploadedCv || !$selectedJob} on:click={generate}>
+            {isGenerating ? 'Generating...' : (isCurrentJobCustomization ? 'Regenerate' : 'Generate')}
           </button>
-          {#if $customizedCv && $coverLetter}
+          {#if isCurrentJobCustomization && $coverLetter}
             <button class="btn text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 shadow-lg shadow-emerald-500/30">
               Continue to Apply →
             </button>
@@ -268,10 +245,10 @@
   {/if}
 </div>
 
-{#if $customizedCv && $uploadedCv}
+{#if isCurrentJobCustomization && $uploadedCv}
   <DiffModal 
-    original={$uploadedCv} 
-    customized={$customizedCv}
+    original={uploadedCvNN} 
+    customized={customizedCvNN}
     isOpen={showDiffModal}
     on:close={() => showDiffModal = false}
   />
