@@ -9,28 +9,31 @@
   ]
 </script>
 
-<nav class="flex justify-center mb-8">
-  <ol class="flex items-center space-x-4">
-    {#each steps as step, i}
-      <li class="flex items-center">
-        <a 
-          href={step.path}
-          class="flex items-center {currentStep === step.number ? 'text-blue-600' : 'text-gray-400'}"
-        >
-          <span class="flex items-center justify-center w-8 h-8 rounded-full border-2 
-            {currentStep === step.number ? 'border-blue-600 bg-blue-100' : 'border-gray-300'}">
+<nav class="flex items-center justify-center gap-3 mb-8">
+  {#each steps as step, i}
+    <div class="flex items-center gap-3">
+      <a href={step.path} class="flex flex-col items-center gap-2 group">
+        <div class="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg transition-all duration-300
+          {currentStep > step.number 
+            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' 
+            : currentStep === step.number
+            ? 'bg-blue-600 text-white ring-4 ring-blue-100 scale-110'
+            : 'bg-gray-100 text-gray-400'}">
+          {#if currentStep > step.number}
+            ✓
+          {:else}
             {step.number}
-          </span>
-          <span class="ml-2 text-sm font-medium">{step.label}</span>
-        </a>
-        {#if i < steps.length - 1}
-          <svg class="w-6 h-6 ml-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
-        {/if}
-      </li>
-    {/each}
-  </ol>
-  </nav>
+          {/if}
+        </div>
+        <span class="text-sm font-medium {currentStep >= step.number ? 'text-gray-900' : 'text-gray-400'}">
+          {step.label}
+        </span>
+      </a>
+      {#if i < steps.length - 1}
+        <div class="w-24 h-1 rounded-full transition-all duration-500 {currentStep > step.number ? 'bg-emerald-500' : 'bg-gray-200'}" />
+      {/if}
+    </div>
+  {/each}
+</nav>
 
 

@@ -5,6 +5,7 @@
   import CoverLetterEditor from '$lib/components/CoverLetterEditor.svelte'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
   import CVDiff from '$lib/components/CVDiff.svelte'
+  import CVDisplayWithDiff from '$lib/components/CVDisplayWithDiff.svelte'
 
   let isGenerating = false
   let error = ''
@@ -41,7 +42,8 @@
 </script>
 
 <div class="container mx-auto px-4 py-8 max-w-screen-2xl">
-  <h1 class="text-3xl font-bold mb-4">Customize</h1>
+  <h1 class="text-3xl font-bold mb-2">Customize Your Application</h1>
+  <p class="text-gray-600 mb-4">Review the AI-generated customizations and cover letter below</p>
   {#if !$uploadedCv}
     <p class="text-gray-600">You need to upload a CV first. <a href="/upload" class="text-blue-600">Go to upload</a>.</p>
   {/if}
@@ -50,62 +52,96 @@
   {:else if !$selectedJob}
     <p class="text-gray-600">No job selected. <a href="/search" class="text-blue-600">Search jobs</a>.</p>
   {:else}
-    <div class="customize-grid mb-6">
-      <div class="column-card">
-        <h3 class="font-semibold mb-3 border-b pb-2 sticky top-0 bg-white z-10">Your CV</h3>
-        <CVDisplay cv={$uploadedCv} />
-      </div>
-      <div class="column-card bg-blue-50">
-        <h3 class="font-semibold mb-3 border-b border-blue-200 pb-2 sticky top-0 bg-blue-50 z-10">{ $selectedJob.title }</h3>
-        <p class="text-sm text-gray-700 whitespace-pre-wrap">{ $selectedJob.description }</p>
-        {#if jobSkills.length}
-          <div class="mt-3">
-            <p class="text-sm font-medium text-gray-700 mb-2">Extracted required skills</p>
-            <div class="flex flex-wrap gap-2">
-              {#each jobSkills as s}
-                <span class="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs">{s}</span>
-              {/each}
-            </div>
+    <div class="grid lg:grid-cols-12 gap-6 mb-8">
+      <div class="lg:col-span-4">
+        <div class="column-card bg-gray-50">
+          <div class="sticky top-0 bg-gray-50 pb-3 border-b border-gray-200 mb-4 z-10">
+            <h3 class="font-semibold text-lg">Your Original CV</h3>
+            <p class="text-sm text-gray-600">Uploaded version</p>
           </div>
-        {/if}
+          <CVDisplay cv={$uploadedCv} />
+        </div>
       </div>
-      <div class="column-card { $customizedCv ? 'bg-green-50' : 'bg-gray-50' }">
-        <h3 class="font-semibold mb-3 border-b pb-2 sticky top-0 bg-inherit z-10">Customized CV</h3>
-        {#if $customizedCv}
-          <CVDisplay cv={$customizedCv} />
-          {#if matchCalc}
-            <div class="mt-3">
-              <p class="text-sm text-gray-700">Skill match: <span class="font-semibold">{matchCalc.percent}%</span></p>
-              {#if matchCalc.match.length}
-                <div class="flex flex-wrap gap-2 mt-1">
-                  {#each matchCalc.match as s}
-                    <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">{s}</span>
+      <div class="lg:col-span-4">
+        <div class="column-card bg-blue-50">
+          <div class="sticky top-0 bg-blue-50 pb-3 border-b border-blue-200 mb-4 z-10">
+            <h3 class="font-semibold text-lg">{ $selectedJob.title }</h3>
+            <p class="text-sm text-gray-700">{ $selectedJob.company }</p>
+          </div>
+          <div class="space-y-6">
+            {#if jobSkills.length}
+              <div class="p-4 bg-white rounded-xl border border-blue-200">
+                <h4 class="font-semibold text-sm text-gray-900 mb-3">Required Skills</h4>
+                <div class="flex flex-wrap gap-2">
+                  {#each jobSkills as s}
+                    <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">{s}</span>
                   {/each}
                 </div>
-              {/if}
+              </div>
+            {/if}
+            <div>
+              <h4 class="font-semibold mb-2 text-sm text-gray-700">Description</h4>
+              <p class="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{ $selectedJob.description }</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="lg:col-span-4">
+        <div class="column-card { $customizedCv ? 'bg-emerald-50' : 'bg-gray-100' }">
+          <div class="sticky top-0 pb-3 border-b mb-4 z-10 { $customizedCv ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-100 border-gray-200' }">
+            <h3 class="font-semibold text-lg">Customized CV</h3>
+            {#if matchCalc}
+              <div class="flex items-center gap-2 mt-2">
+                <div class="flex-1 h-2 bg-white rounded-full overflow-hidden">
+                  <div class="h-full bg-emerald-500 transition-all duration-500" style={`width: ${matchCalc.percent}%`} />
+                </div>
+                <span class="text-sm font-semibold text-emerald-700">{matchCalc.percent}% match</span>
+              </div>
+            {/if}
+          </div>
+          {#if $customizedCv}
+            <CVDisplayWithDiff original={$uploadedCv} customized={$customizedCv} />
+            <div class="mt-6 p-4 bg-white rounded-xl border border-emerald-200">
+              <h4 class="font-semibold text-sm mb-3">Changes Made</h4>
+              <CVDiff original={$uploadedCv} customized={$customizedCv} />
+            </div>
+          {:else}
+            <div class="text-center py-12">
+              <p class="text-gray-500">Click Generate to customize</p>
             </div>
           {/if}
-          <div class="mt-4">
-            <CVDiff original={$uploadedCv} customized={$customizedCv} />
-          </div>
-        {:else}
-          <p class="text-gray-500">Not generated yet</p>
-        {/if}
+        </div>
       </div>
     </div>
 
     {#if $coverLetter}
-      <div class="card bg-white mb-6">
-        <h3 class="font-semibold mb-3 border-b pb-2">Cover Letter</h3>
+      <div class="card bg-white mb-8">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-semibold text-lg">Cover Letter</h3>
+          <button class="text-sm text-blue-600 hover:text-blue-700" on:click={generate}>Regenerate</button>
+        </div>
         <CoverLetterEditor bind:value={$coverLetter} />
       </div>
     {/if}
 
-    <button class="btn btn-primary" disabled={isGenerating} on:click={generate}>
-      {isGenerating ? 'Generating...' : 'Generate'}
-    </button>
-    {#if error}<p class="text-sm text-red-600 mt-2">{error}</p>{/if}
-    {#if success}<p class="text-sm text-green-600 mt-2">{success}</p>{/if}
+    <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl p-4 z-50">
+      <div class="container mx-auto flex items-center justify-between">
+        <div class="flex items-center gap-2 text-sm">
+          {#if $customizedCv}
+            <span class="text-emerald-600">Ready to apply</span>
+          {/if}
+        </div>
+        <div class="flex items-center gap-3">
+          <button class="btn btn-secondary">Save Draft</button>
+          <button class="btn btn-primary" disabled={isGenerating} on:click={generate}>
+            {isGenerating ? 'Generating...' : ($customizedCv ? 'Regenerate' : 'Generate Customization')}
+          </button>
+          {#if $customizedCv && $coverLetter}
+            <button class="btn text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 shadow-lg shadow-emerald-500/30">Continue to Apply →</button>
+          {/if}
+        </div>
+      </div>
+    </div>
   {/if}
 </div>
 

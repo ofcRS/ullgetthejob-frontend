@@ -128,9 +128,12 @@
 </script>
 
 <div class="container mx-auto px-4 py-8 max-w-screen-2xl">
-  <h1 class="text-3xl font-bold mb-4">Upload your CV</h1>
+  <div class="max-w-4xl mx-auto text-center mb-8">
+    <h1 class="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Welcome to UllGetTheJob</h1>
+    <p class="text-lg md:text-xl text-gray-600">Upload your CV and let AI create personalized applications in minutes</p>
+  </div>
 
-  <label class="block text-sm font-medium text-gray-700 mb-2" for="model-select">AI Model</label>
+  <label class="label" for="model-select">AI Model</label>
   <select id="model-select" bind:value={$selectedModel} class="input w-full mb-2">
     {#each models as model}
       <option value={model.id}>{model.name} ({model.provider})</option>
@@ -151,36 +154,63 @@
     </div>
   {/if}
 
-  <input bind:this={fileInput} type="file" accept=".pdf,.doc,.docx" on:change={handleFileUpload}
-    class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+  <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto mt-6">
+    <div class="group relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 border-2 border-dashed border-blue-200 hover:border-blue-500 hover:shadow-xl transition-all duration-300 cursor-pointer" on:click={() => fileInput?.click()} role="button" tabindex="0" aria-label="Upload CV from computer" on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && fileInput?.click()}>
+      <div class="text-center">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center transition-colors duration-300">
+          <span class="text-2xl">⬆️</span>
+        </div>
+        <h3 class="text-xl font-semibold mb-2">Upload from Computer</h3>
+        <p class="text-gray-600 text-sm mb-4">PDF, DOC, or DOCX format • Max 10MB</p>
+        <input type="file" class="hidden" bind:this={fileInput} accept=".pdf,.doc,.docx" on:change={handleFileUpload} />
+        <button class="btn btn-primary">Browse Files</button>
+      </div>
+      <div class="absolute inset-0 bg-blue-500/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300" aria-hidden="true">
+        <p class="text-white font-semibold">Drop your CV here</p>
+      </div>
+    </div>
 
-  {#if isUploading}
-    <p class="text-sm text-gray-600 mt-2">{progressStage || 'Uploading...'}</p>
-  {/if}
-
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-    <div>
-      <div class="mb-4">
-        <h3 class="font-semibold mb-2">HH.ru</h3>
+    <div class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-8 border-2 border-emerald-200 hover:border-emerald-500 hover:shadow-xl transition-all duration-300">
+      <div class="text-center">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-100 flex items-center justify-center">
+          <span class="text-2xl">🌐</span>
+        </div>
+        <h3 class="text-xl font-semibold mb-2">Import from HH.ru</h3>
+        <p class="text-gray-600 text-sm mb-4">{hhConnected ? 'Select from your saved resumes' : 'Connect your HH.ru account'}</p>
         {#if hhConnected}
-          <p class="text-sm text-green-700">Connected</p>
           {#if hhResumes.length}
-            <p class="text-sm text-gray-700 mt-2">Your resumes:</p>
-            <ul class="list-disc ml-5 mt-1">
+            <div class="max-h-40 overflow-y-auto text-left space-y-2">
               {#each hhResumes as r}
-                <li class="text-sm flex items-center gap-2">
-                  <span class="flex-1">{r.title || r.id}</span>
-                  <button class="btn btn-secondary text-xs" disabled={isImporting} on:click={() => importFromHH(r.id)}>
-                    {isImporting ? 'Importing...' : 'Import'}
-                  </button>
-                </li>
+                <div class="flex items-center gap-2">
+                  <span class="flex-1 text-sm">{r.title || r.id}</span>
+                  <button class="btn btn-secondary text-xs" disabled={isImporting} on:click={() => importFromHH(r.id)}>{isImporting ? 'Importing...' : 'Import'}</button>
+                </div>
               {/each}
-            </ul>
+            </div>
+          {:else}
+            <p class="text-sm text-gray-600">No resumes found</p>
           {/if}
         {:else}
           <button class="btn btn-secondary" on:click={connectHH}>Connect HH.ru</button>
         {/if}
       </div>
+    </div>
+  </div>
+
+  {#if isUploading}
+    <div class="max-w-md mx-auto mt-8 p-6 bg-white rounded-xl shadow-lg" aria-live="polite">
+      <div class="flex items-center gap-4 mb-3">
+        <div class="h-5 w-5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin"></div>
+        <span class="font-medium text-gray-900">{progressStage || 'Uploading...'}</span>
+      </div>
+      <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+        <div class="h-full bg-blue-600 rounded-full animate-progress"></div>
+      </div>
+    </div>
+  {/if}
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+    <div>
       {#if uploadedCvs.length > 0}
         <h3 class="font-semibold mb-2">Previously Uploaded CVs</h3>
         <div class="space-y-2">
@@ -194,6 +224,12 @@
           {/each}
         </div>
       {/if}
+      {#if error}
+        <p class="text-sm text-red-600 mt-2">{error}</p>
+      {/if}
+      {#if success}
+        <p class="text-sm text-green-600 mt-2">{success}</p>
+      {/if}
     </div>
     <div>
       {#if showPreview && $uploadedCv}
@@ -202,13 +238,6 @@
       {/if}
     </div>
   </div>
-
-  {#if error}
-    <p class="text-sm text-red-600 mt-2">{error}</p>
-  {/if}
-  {#if success}
-    <p class="text-sm text-green-600 mt-2">{success}</p>
-  {/if}
 </div>
 
 
