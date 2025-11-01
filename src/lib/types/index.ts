@@ -27,6 +27,7 @@ export interface JobItem {
   url?: string
   skills?: string[]
   has_test?: boolean
+  fullDescriptionLoaded?: boolean
 }
 
 export interface ModelInfo {

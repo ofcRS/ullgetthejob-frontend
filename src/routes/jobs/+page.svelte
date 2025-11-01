@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { selectedJob } from '$lib/stores/jobs.store'
+  import { jobs, selectedJob } from '$lib/stores/jobs.store'
   import { uploadedCv, customizedCv, coverLetter, selectedModel } from '$lib/stores/cv.store'
   import { customizeCv } from '$lib/api/cv.api'
+  import { getJobDetails } from '$lib/api/jobs.api'
   import CoverLetterEditor from '$lib/components/CoverLetterEditor.svelte'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
   import DiffModal from '$lib/components/DiffModal.svelte'
-  import type { ParsedCV, CustomizedCV } from '$lib/types'
+  import type { ParsedCV, CustomizedCV, JobItem } from '$lib/types'
 
   let isGenerating = false
   let error = ''
@@ -13,6 +14,9 @@
   let jobSkills: any = null
   let showDiffModal = false
   let customizedForJobId: string | null = null
+  let jobDetailError = ''
+  let jobDetailLoading = false
+  let detailFetchInFlightFor: string | null = null
 
   // Typed non-null views guarded by UI conditions
   $: uploadedCvNN = $uploadedCv as ParsedCV
@@ -20,14 +24,18 @@
 
   // Extract all skills from structured response or handle flat array
   $: allJobSkills = (() => {
-    if (!jobSkills) return []
-    if (Array.isArray(jobSkills)) return jobSkills
-    const skills: string[] = []
-    if (jobSkills.required) skills.push(...jobSkills.required)
-    if (jobSkills.preferred) skills.push(...jobSkills.preferred)
-    if (jobSkills.tools) skills.push(...jobSkills.tools)
-    if (jobSkills.frameworks) skills.push(...jobSkills.frameworks)
-    return [...new Set(skills)]
+    if (jobSkills) {
+      if (Array.isArray(jobSkills)) return jobSkills
+      const skills: string[] = []
+      if (jobSkills.required) skills.push(...jobSkills.required)
+      if (jobSkills.preferred) skills.push(...jobSkills.preferred)
+      if (jobSkills.tools) skills.push(...jobSkills.tools)
+      if (jobSkills.frameworks) skills.push(...jobSkills.frameworks)
+      return [...new Set(skills)]
+    }
+
+    const fallbackSkills = $selectedJob?.skills
+    return fallbackSkills && fallbackSkills.length ? fallbackSkills : []
   })()
 
   $: isCurrentJobCustomization = $customizedCv && $selectedJob && customizedForJobId === $selectedJob.id
@@ -66,6 +74,58 @@
     coverLetter.set('')
     jobSkills = null
     customizedForJobId = null
+  }
+
+  $: if ($selectedJob) {
+    void ensureJobDetail($selectedJob)
+  }
+
+  function shouldFetchFullDescription(job: JobItem | null) {
+    if (!job) return false
+    if (job.fullDescriptionLoaded) return false
+    const length = job.description ? job.description.trim().length : 0
+    return length < 400
+  }
+
+  async function ensureJobDetail(job: JobItem) {
+    if (!shouldFetchFullDescription(job)) {
+      jobDetailError = ''
+      return
+    }
+
+    if (detailFetchInFlightFor === job.id) return
+    detailFetchInFlightFor = job.id
+    jobDetailLoading = true
+    jobDetailError = ''
+
+    try {
+      const result = await getJobDetails(job.id)
+
+      if (result.success && result.job) {
+        const updatedJob = {
+          ...job,
+          ...result.job,
+          fullDescriptionLoaded: true
+        }
+
+        if ($selectedJob?.id === job.id) {
+          selectedJob.set(updatedJob)
+        }
+
+        jobs.update((items) =>
+          items.map((item) => (item.id === job.id ? { ...item, ...result.job, fullDescriptionLoaded: true } : item))
+        )
+      } else if (!result.success) {
+        jobDetailError = result.error || 'Failed to load job details'
+      }
+    } catch (err) {
+      jobDetailError = err instanceof Error ? err.message : 'Failed to load job details'
+    } finally {
+      if (detailFetchInFlightFor === job.id) {
+        detailFetchInFlightFor = null
+      }
+      jobDetailLoading = false
+    }
   }
 </script>
 
@@ -125,6 +185,11 @@
 
             <section>
               <h4 class="font-semibold text-sm mb-2 text-gray-900">Job Description</h4>
+              {#if jobDetailLoading}
+                <p class="text-xs text-blue-600 mb-2">Loading full description…</p>
+              {:else if jobDetailError}
+                <p class="text-xs text-red-600 mb-2">{jobDetailError}</p>
+              {/if}
               <div class="prose prose-sm max-w-none">
                 <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{$selectedJob.description}</div>
               </div>
