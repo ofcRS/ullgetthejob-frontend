@@ -1,5 +1,7 @@
 <script lang="ts">
   import CVDisplay from '$lib/components/CVDisplay.svelte'
+  import { uploadedCv } from '$lib/stores/cv.store'
+  import { goto } from '$app/navigation'
   import type { ParsedCV } from '$lib/types'
 
   export let params: { id: string }
@@ -35,6 +37,13 @@
     }
   }
 
+  function handleConfirm() {
+    if (cv) {
+      uploadedCv.set(cv)
+      goto('/search')
+    }
+  }
+
   loadCv()
 </script>
 
@@ -44,6 +53,11 @@
     <p class="text-red-600">{error}</p>
   {:else if cv}
     <CVDisplay {cv} />
+    <div class="mt-6 flex gap-4">
+      <button class="btn btn-primary flex-1" on:click={handleConfirm}>
+        Confirm & Continue
+      </button>
+    </div>
   {:else}
     <p class="text-gray-600">Loading...</p>
   {/if}

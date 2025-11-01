@@ -22,6 +22,7 @@
   let hhConnected = false
   let hhResumes: any[] = []
   let isImporting = false
+  let hhStatusInterval: ReturnType<typeof setInterval> | null = null
   $: selected = models.find(m => m.id === $selectedModel)
 
   onMount(() => {
@@ -40,7 +41,12 @@
         } catch {}
       }
     })
-    return () => { unsub() }
+    checkHHStatus()
+    hhStatusInterval = setInterval(checkHHStatus, 5 * 60 * 1000)
+    return () => {
+      unsub()
+      if (hhStatusInterval) clearInterval(hhStatusInterval)
+    }
   })
 
   async function loadPreviousCVs() {
@@ -56,25 +62,38 @@
 
   async function checkHHStatus() {
     try {
-      const res = await fetch(`${API}/api/auth/hh/status`)
+      const res = await fetch(`${API}/api/auth/hh/status`, {
+        credentials: 'include'
+      })
       const data = await res.json()
       hhConnected = !!data.connected
-      if (hhConnected) await loadHHResumes()
-    } catch {}
+      if (hhConnected) {
+        await loadHHResumes()
+      } else {
+        hhResumes = []
+      }
+    } catch (err) {
+      console.error('Failed to check HH status:', err)
+      hhConnected = false
+    }
   }
 
   async function loadHHResumes() {
     try {
-      const res = await fetch(`${API}/api/hh/resumes`)
+      const res = await fetch(`${API}/api/hh/resumes`, {
+        credentials: 'include'
+      })
       const data = await res.json()
       if (data.success) hhResumes = data.items || []
-    } catch {}
+    } catch (err) {
+      console.error('Failed to load HH resumes:', err)
+    }
   }
 
-  checkHHStatus()
-
   async function connectHH() {
-    const res = await fetch(`${API}/api/auth/hh/login`)
+    const res = await fetch(`${API}/api/auth/hh/login`, {
+      credentials: 'include'
+    })
     const data = await res.json()
     if (data?.url) {
       window.location.href = data.url
@@ -84,7 +103,10 @@
   async function importFromHH(resumeId: string) {
     try {
       isImporting = true
-      const res = await fetch(`${API}/api/cv/import/hh/${resumeId}`, { method: 'POST' })
+      const res = await fetch(`${API}/api/cv/import/hh/${resumeId}`, {
+        method: 'POST',
+        credentials: 'include'
+      })
       const data = await res.json()
       if (data.success && data.cv) {
         uploadedCv.set(data.cv)

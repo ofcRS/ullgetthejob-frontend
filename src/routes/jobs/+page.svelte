@@ -1,7 +1,7 @@
 <script lang="ts">
   import { jobs, selectedJob } from '$lib/stores/jobs.store'
   import { uploadedCv, customizedCv, coverLetter, selectedModel } from '$lib/stores/cv.store'
-  import { customizeCv } from '$lib/api/cv.api'
+  import { customizeCv, submitApplication } from '$lib/api/cv.api'
   import { getJobDetails } from '$lib/api/jobs.api'
   import CoverLetterEditor from '$lib/components/CoverLetterEditor.svelte'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
@@ -22,6 +22,9 @@
   const detailFetchPromises = new Map<string, Promise<JobItem>>()
   let selectedJobDescription = ''
   let lastSelectedJobId: string | null = null
+  let isSubmitting = false
+  let submitError = ''
+  let submitSuccess = ''
 
   // Typed non-null views guarded by UI conditions
   $: jobDetailLoading = jobDetailLoadingFor !== null && $selectedJob?.id === jobDetailLoadingFor
@@ -172,6 +175,36 @@
 
     detailFetchPromises.set(job.id, fetchPromise)
     return fetchPromise
+  }
+
+  async function handleApply() {
+    if (!isCurrentJobCustomization || !$selectedJob || !$customizedCv || !$coverLetter) {
+      submitError = 'Missing data to submit application.'
+      return
+    }
+
+    isSubmitting = true
+    submitError = ''
+    submitSuccess = ''
+
+    try {
+      const response = await submitApplication({
+        jobExternalId: $selectedJob.hh_vacancy_id || $selectedJob.id,
+        customizedCV: $customizedCv,
+        coverLetter: $coverLetter
+      })
+
+      if (response.success) {
+        submitSuccess = response.message || 'Application submitted successfully!'
+      } else {
+        submitError = response.error || 'Failed to submit application.'
+      }
+    } catch (error) {
+      console.error('Submit error:', error)
+      submitError = 'Network error during submission.'
+    } finally {
+      isSubmitting = false
+    }
   }
 </script>
 
@@ -352,8 +385,12 @@
             {isGenerating ? 'Generating...' : (isCurrentJobCustomization ? 'Regenerate' : 'Generate')}
           </button>
           {#if isCurrentJobCustomization && $coverLetter}
-            <button class="btn text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 shadow-lg shadow-emerald-500/30">
-              Continue to Apply →
+            <button 
+              class="btn text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 shadow-lg shadow-emerald-500/30"
+              disabled={isSubmitting}
+              on:click={handleApply}
+            >
+              {isSubmitting ? 'Submitting…' : 'Continue to Apply →'}
             </button>
           {/if}
         </div>
@@ -369,6 +406,20 @@
     isOpen={showDiffModal}
     on:close={() => showDiffModal = false}
   />
+{/if}
+
+{#if submitError}
+  <div class="fixed bottom-20 left-0 right-0 flex justify-center pointer-events-none">
+    <div class="bg-red-600 text-white px-4 py-2 rounded-md shadow pointer-events-auto">
+      {submitError}
+    </div>
+  </div>
+{:else if submitSuccess}
+  <div class="fixed bottom-20 left-0 right-0 flex justify-center pointer-events-none">
+    <div class="bg-emerald-600 text-white px-4 py-2 rounded-md shadow pointer-events-auto">
+      {submitSuccess}
+    </div>
+  </div>
 {/if}
 
 <style>

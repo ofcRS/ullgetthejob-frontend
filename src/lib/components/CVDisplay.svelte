@@ -2,6 +2,32 @@
   import SkillChip from './SkillChip.svelte'
   import type { ParsedCV } from '$lib/types'
   export let cv: ParsedCV
+
+  const normalizeText = (value: unknown): string => {
+    if (value == null) return ''
+    if (typeof value === 'string') return value
+    if (Array.isArray(value)) {
+      return value
+        .map((entry) => normalizeText(entry))
+        .filter((entry) => entry.trim().length > 0)
+        .join('\n\n')
+    }
+    if (typeof value === 'object') {
+      const parts = Object.values(value as Record<string, unknown>)
+        .map((entry) => normalizeText(entry))
+        .filter((entry) => entry.trim().length > 0)
+      return parts.join(', ')
+    }
+    return String(value)
+  }
+
+  const toHtml = (value: unknown) => {
+    const text = normalizeText(value)
+    return text ? text.replace(/\n/g, '<br>') : ''
+  }
+
+  $: experienceHtml = toHtml(cv?.experience)
+  $: educationHtml = toHtml(cv?.education)
 </script>
 
 <div class="cv-display card bg-white">
@@ -40,20 +66,20 @@
     </section>
   {/if}
 
-  {#if cv.experience}
+  {#if experienceHtml}
     <section class="mb-6">
       <h2 class="text-xl font-semibold mb-3">Work Experience</h2>
       <div class="prose prose-sm max-w-none">
-        {@html cv.experience.replace(/\n/g, '<br>')}
+        {@html experienceHtml}
       </div>
     </section>
   {/if}
 
-  {#if cv.education}
+  {#if educationHtml}
     <section class="mb-6">
       <h2 class="text-xl font-semibold mb-3">Education</h2>
       <div class="prose prose-sm max-w-none">
-        {@html cv.education.replace(/\n/g, '<br>')}
+        {@html educationHtml}
       </div>
     </section>
   {/if}

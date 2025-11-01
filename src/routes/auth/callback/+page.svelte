@@ -16,7 +16,9 @@
       return
     }
     try {
-      const res = await fetch(`${API}/api/auth/hh/callback?code=${encodeURIComponent(code)}`)
+      const res = await fetch(`${API}/api/auth/hh/callback?code=${encodeURIComponent(code)}`, {
+        credentials: 'include'
+      })
       const data = await res.json()
       if (data.success) {
         status = 'HH.ru connected!'

@@ -34,6 +34,7 @@ export async function submitApplication(params: { jobExternalId: string; customi
   const res = await fetch(`${API_URL}/api/application/submit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(params)
   })
   return await res.json()
