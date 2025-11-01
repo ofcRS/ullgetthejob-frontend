@@ -24,6 +24,8 @@ export interface JobItem {
   salary?: string
   area?: string
   description: string
+  descriptionPreview?: string
+  fullDescription?: string
   url?: string
   skills?: string[]
   has_test?: boolean

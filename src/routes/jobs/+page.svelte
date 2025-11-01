@@ -6,6 +6,8 @@
   import CoverLetterEditor from '$lib/components/CoverLetterEditor.svelte'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
   import DiffModal from '$lib/components/DiffModal.svelte'
+  import { normalizeJob } from '$lib/utils/job'
+  import { get } from 'svelte/store'
   import type { ParsedCV, CustomizedCV, JobItem } from '$lib/types'
 
   let isGenerating = false
@@ -15,10 +17,15 @@
   let showDiffModal = false
   let customizedForJobId: string | null = null
   let jobDetailError = ''
+  let jobDetailLoadingFor: string | null = null
   let jobDetailLoading = false
-  let detailFetchInFlightFor: string | null = null
+  const detailFetchPromises = new Map<string, Promise<JobItem>>()
+  let selectedJobDescription = ''
+  let lastSelectedJobId: string | null = null
 
   // Typed non-null views guarded by UI conditions
+  $: jobDetailLoading = jobDetailLoadingFor !== null && $selectedJob?.id === jobDetailLoadingFor
+  $: selectedJobDescription = $selectedJob?.fullDescription ?? $selectedJob?.description ?? ''
   $: uploadedCvNN = $uploadedCv as ParsedCV
   $: customizedCvNN = $customizedCv as CustomizedCV
 
@@ -56,13 +63,29 @@
     isGenerating = true
     error = ''
     success = ''
-    const res = await customizeCv({ cv: $uploadedCv, jobDescription: $selectedJob.description, model: $selectedModel })
+    let jobForGeneration = $selectedJob
+
+    try {
+      jobForGeneration = await ensureJobDetail($selectedJob)
+    } catch (err) {
+      console.error('Failed to ensure full job description', err)
+    }
+
+    const jobDescription = jobForGeneration.fullDescription ?? jobForGeneration.description
+
+    if (!jobDescription || !jobDescription.trim().length) {
+      error = 'Job description unavailable. Please reload the job posting and try again.'
+      isGenerating = false
+      return
+    }
+
+    const res = await customizeCv({ cv: $uploadedCv, jobDescription, model: $selectedModel })
     if (res.success) {
       customizedCv.set(res.customizedCV!)
       coverLetter.set(res.coverLetter || '')
       success = `Generated with ${res.modelUsed}!`
       jobSkills = res.jobSkills || null
-      customizedForJobId = $selectedJob.id
+      customizedForJobId = jobForGeneration.id
     } else {
       error = res.error || 'Generation failed'
     }
@@ -77,55 +100,78 @@
   }
 
   $: if ($selectedJob) {
+    if (lastSelectedJobId !== $selectedJob.id) {
+      jobDetailError = ''
+      lastSelectedJobId = $selectedJob.id
+    }
     void ensureJobDetail($selectedJob)
+  } else {
+    lastSelectedJobId = null
+    jobDetailLoadingFor = null
   }
 
   function shouldFetchFullDescription(job: JobItem | null) {
     if (!job) return false
-    if (job.fullDescriptionLoaded) return false
-    const length = job.description ? job.description.trim().length : 0
-    return length < 400
+    if (job.fullDescriptionLoaded && job.fullDescription && job.fullDescription.trim().length > 0) return false
+    return true
   }
 
-  async function ensureJobDetail(job: JobItem) {
-    if (!shouldFetchFullDescription(job)) {
+  async function ensureJobDetail(job: JobItem, options: { force?: boolean } = {}): Promise<JobItem> {
+    if (!options.force && !shouldFetchFullDescription(job)) {
       jobDetailError = ''
-      return
+      return job
     }
 
-    if (detailFetchInFlightFor === job.id) return
-    detailFetchInFlightFor = job.id
-    jobDetailLoading = true
-    jobDetailError = ''
+    const existingPromise = detailFetchPromises.get(job.id)
+    if (existingPromise) {
+      jobDetailLoadingFor = job.id
+      return existingPromise
+    }
 
-    try {
-      const result = await getJobDetails(job.id)
+    const fetchPromise = (async () => {
+      jobDetailLoadingFor = job.id
+      jobDetailError = ''
 
-      if (result.success && result.job) {
-        const updatedJob = {
-          ...job,
-          ...result.job,
-          fullDescriptionLoaded: true
+      try {
+        const result = await getJobDetails(job.id)
+
+        if (result.success && result.job) {
+          const normalized = normalizeJob(result.job, {
+            ...job,
+            descriptionPreview: job.descriptionPreview ?? job.description
+          })
+
+          normalized.fullDescriptionLoaded = true
+          normalized.descriptionPreview = job.descriptionPreview ?? normalized.descriptionPreview ?? job.description
+          normalized.description = normalized.fullDescription ?? normalized.description
+
+          const currentSelected = get(selectedJob)
+          if (currentSelected?.id === job.id) {
+            selectedJob.set(normalized)
+          }
+
+          jobs.update((items) =>
+            items.map((item) => (item.id === job.id ? normalized : item))
+          )
+
+          return normalized
         }
 
-        if ($selectedJob?.id === job.id) {
-          selectedJob.set(updatedJob)
-        }
-
-        jobs.update((items) =>
-          items.map((item) => (item.id === job.id ? { ...item, ...result.job, fullDescriptionLoaded: true } : item))
-        )
-      } else if (!result.success) {
         jobDetailError = result.error || 'Failed to load job details'
+        return job
+      } catch (err) {
+        jobDetailError = err instanceof Error ? err.message : 'Failed to load job details'
+        return job
+      } finally {
+        detailFetchPromises.delete(job.id)
+        if (jobDetailLoadingFor === job.id) {
+          jobDetailLoadingFor = null
+        }
       }
-    } catch (err) {
-      jobDetailError = err instanceof Error ? err.message : 'Failed to load job details'
-    } finally {
-      if (detailFetchInFlightFor === job.id) {
-        detailFetchInFlightFor = null
-      }
-      jobDetailLoading = false
-    }
+    })()
+
+    detailFetchPromises.set(job.id, fetchPromise)
+    return fetchPromise
   }
 </script>
 
@@ -186,12 +232,18 @@
             <section>
               <h4 class="font-semibold text-sm mb-2 text-gray-900">Job Description</h4>
               {#if jobDetailLoading}
-                <p class="text-xs text-blue-600 mb-2">Loading full description…</p>
+                <div class="flex items-center gap-2 text-xs text-blue-600 mb-2">
+                  <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  <span>Loading full description…</span>
+                </div>
               {:else if jobDetailError}
                 <p class="text-xs text-red-600 mb-2">{jobDetailError}</p>
               {/if}
               <div class="prose prose-sm max-w-none">
-                <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{$selectedJob.description}</div>
+                <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap description-scroll">{selectedJobDescription}</div>
               </div>
             </section>
 
@@ -340,6 +392,29 @@
   }
 
   .column-card::-webkit-scrollbar-thumb:hover {
+    background: #A0AEC0;
+  }
+
+  .description-scroll {
+    max-height: 22rem;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+  }
+
+  .description-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .description-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .description-scroll::-webkit-scrollbar-thumb {
+    background: #CBD5E0;
+    border-radius: 3px;
+  }
+
+  .description-scroll::-webkit-scrollbar-thumb:hover {
     background: #A0AEC0;
   }
 </style>

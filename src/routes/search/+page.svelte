@@ -4,6 +4,7 @@
   import { searchJobs } from '$lib/api/jobs.api'
   import { uploadedCv, clearCustomization } from '$lib/stores/cv.store'
   import { goto } from '$app/navigation'
+  import { normalizeJob } from '$lib/utils/job'
 
   let query = ''
   let area = '1'
@@ -16,7 +17,8 @@
     jobs.set([])
     const res = await searchJobs({ text: query, area, schedule: 'remote' })
     if (res.success) {
-      jobs.set(res.jobs)
+      const normalizedJobs = res.jobs.map((job) => normalizeJob(job))
+      jobs.set(normalizedJobs)
     } else {
       error = res.error || 'Search failed'
     }
@@ -31,7 +33,9 @@
 
   function chooseJob(job: any) {
     clearCustomization()
-    selectedJob.set(job)
+    const normalized = normalizeJob(job)
+    selectedJob.set(normalized)
+    jobs.update((items) => items.map((item) => (item.id === normalized.id ? normalized : item)))
     goto('/jobs')
   }
 </script>
