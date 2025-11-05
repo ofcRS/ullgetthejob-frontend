@@ -1,6 +1,7 @@
 <script lang="ts">
   import { jobs, selectedJob } from '$lib/stores/jobs.store'
   import { uploadedCv, customizedCv, coverLetter, selectedModel } from '$lib/stores/cv.store'
+  import { jobCvStore, currentJobCv } from '$lib/stores/job-cv.store'
   import { customizeCv, submitApplication } from '$lib/api/cv.api'
   import { getJobDetails } from '$lib/api/jobs.api'
   import CoverLetterEditor from '$lib/components/CoverLetterEditor.svelte'
@@ -82,6 +83,14 @@
 
     const res = await customizeCv({ cv: $uploadedCv, jobDescription, model: $selectedModel })
     if (res.success) {
+      // Save to job-specific store to preserve across job switches
+      jobCvStore.setJobData(jobForGeneration.id, {
+        customizedCv: res.customizedCV!,
+        coverLetter: res.coverLetter || '',
+        jobSkills: res.jobSkills || null
+      })
+
+      // Also update global stores for immediate UI updates
       customizedCv.set(res.customizedCV!)
       coverLetter.set(res.coverLetter || '')
       success = `Generated with ${res.modelUsed}!`
@@ -93,22 +102,40 @@
     isGenerating = false
   }
 
-  $: if ($selectedJob && customizedForJobId && customizedForJobId !== $selectedJob.id) {
-    customizedCv.set(null)
-    coverLetter.set('')
-    jobSkills = null
-    customizedForJobId = null
-  }
-
+  // Load job-specific customization when job changes
   $: if ($selectedJob) {
     if (lastSelectedJobId !== $selectedJob.id) {
       jobDetailError = ''
       lastSelectedJobId = $selectedJob.id
+
+      // Load cached customization for this job
+      const cached = $currentJobCv
+      if (cached) {
+        customizedCv.set(cached.customizedCv)
+        coverLetter.set(cached.coverLetter)
+        jobSkills = cached.jobSkills
+        customizedForJobId = $selectedJob.id
+      } else {
+        // No cached customization for this job
+        customizedCv.set(null)
+        coverLetter.set('')
+        jobSkills = null
+        customizedForJobId = null
+      }
+
+      // Fetch job details if needed - properly handle the promise
+      ensureJobDetail($selectedJob).catch((err) => {
+        console.error('Failed to load job details:', err)
+        jobDetailError = err instanceof Error ? err.message : 'Failed to load job details'
+      })
     }
-    void ensureJobDetail($selectedJob)
   } else {
     lastSelectedJobId = null
     jobDetailLoadingFor = null
+    customizedCv.set(null)
+    coverLetter.set('')
+    jobSkills = null
+    customizedForJobId = null
   }
 
   function shouldFetchFullDescription(job: JobItem | null) {

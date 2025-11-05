@@ -32,6 +32,11 @@
   } : null
 
   function chooseJob(job: any) {
+    if (!$uploadedCv) {
+      error = 'Please upload your CV before selecting a job. Go to the Upload page to get started.'
+      return
+    }
+
     clearCustomization()
     const normalized = normalizeJob(job)
     selectedJob.set(normalized)
@@ -43,7 +48,18 @@
 <div class="container mx-auto px-4 py-8 max-w-screen-2xl">
   <h1 class="text-3xl font-bold mb-4">Search Jobs</h1>
 
-  {#if selectedCvInfo}
+  {#if !$uploadedCv}
+    <div class="mb-6 p-6 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-2xl">⚠️</div>
+        <div class="flex-1">
+          <h3 class="font-semibold text-amber-900 mb-1">CV Required</h3>
+          <p class="text-sm text-amber-800">Please upload your CV first to customize applications for specific jobs.</p>
+        </div>
+        <a href="/upload" class="btn btn-primary whitespace-nowrap">Upload CV</a>
+      </div>
+    </div>
+  {:else if selectedCvInfo}
     <div class="mb-6 p-6 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-100">
       <div class="flex items-center gap-4">
         <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">👤</div>
