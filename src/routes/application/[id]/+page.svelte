@@ -11,11 +11,11 @@
     if (!$customizedCv || !$coverLetter || !$selectedJob) return
     isSubmitting = true
     error = ''
-    const res = await submitApplication({
+    const res = (await submitApplication({
       jobExternalId: $selectedJob.hh_vacancy_id || $selectedJob.id,
       customizedCV: $customizedCv,
       coverLetter: $coverLetter
-    })
+    })) as { success: boolean; error?: string }
     if (res.success) {
       success = 'Application submitted!'
     } else {

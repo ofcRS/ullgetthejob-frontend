@@ -6,6 +6,7 @@
   import { connectWebSocket, disconnectWebSocket, clientId as clientIdStore, wsConnection } from '$lib/stores/ws.store'
   import { goto } from '$app/navigation'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
+  import { validateFileMagicBytes } from '$lib/utils/validation'
   
   const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -206,6 +207,13 @@
     const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
     if (!allowedTypes.includes(file.type)) {
       error = 'Invalid file type. Please upload a PDF, DOC, or DOCX file.'
+      return
+    }
+
+    // Validate file magic bytes to ensure file content matches type
+    const magicBytesResult = await validateFileMagicBytes(file)
+    if (!magicBytesResult.valid) {
+      error = magicBytesResult.error || 'File validation failed. Please ensure the file is a valid PDF, DOC, or DOCX.'
       return
     }
 

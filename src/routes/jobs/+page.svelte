@@ -268,11 +268,11 @@
     isSubmitting = true
 
     try {
-      const response = await submitApplication({
+      const response = (await submitApplication({
         jobExternalId: $selectedJob.hh_vacancy_id || $selectedJob.id,
         customizedCV: $customizedCv,
         coverLetter: trimmedCoverLetter
-      })
+      })) as { success: boolean; error?: string; message?: string }
 
       if (response.success) {
         submitSuccess = response.message || 'Application submitted successfully!'

@@ -1,33 +1,12 @@
 <script lang="ts">
   import SkillChip from './SkillChip.svelte'
   import type { ParsedCV } from '$lib/types'
+  import { sanitizeCVField } from '$lib/utils/sanitize'
   export let cv: ParsedCV
 
-  const normalizeText = (value: unknown): string => {
-    if (value == null) return ''
-    if (typeof value === 'string') return value
-    if (Array.isArray(value)) {
-      return value
-        .map((entry) => normalizeText(entry))
-        .filter((entry) => entry.trim().length > 0)
-        .join('\n\n')
-    }
-    if (typeof value === 'object') {
-      const parts = Object.values(value as Record<string, unknown>)
-        .map((entry) => normalizeText(entry))
-        .filter((entry) => entry.trim().length > 0)
-      return parts.join(', ')
-    }
-    return String(value)
-  }
-
-  const toHtml = (value: unknown) => {
-    const text = normalizeText(value)
-    return text ? text.replace(/\n/g, '<br>') : ''
-  }
-
-  $: experienceHtml = toHtml(cv?.experience)
-  $: educationHtml = toHtml(cv?.education)
+  // Sanitize HTML to prevent XSS attacks
+  $: experienceHtml = sanitizeCVField(cv?.experience)
+  $: educationHtml = sanitizeCVField(cv?.education)
 </script>
 
 <div class="cv-display card bg-white">
