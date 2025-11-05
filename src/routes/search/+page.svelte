@@ -8,21 +8,63 @@
 
   let query = ''
   let area = '1'
+  let schedule = 'remote'
   let error = ''
 
   async function runSearch() {
-    if (!query.trim()) return
-    isSearching.set(true)
     error = ''
-    jobs.set([])
-    const res = await searchJobs({ text: query, area, schedule: 'remote' })
-    if (res.success) {
-      const normalizedJobs = res.jobs.map((job) => normalizeJob(job))
-      jobs.set(normalizedJobs)
-    } else {
-      error = res.error || 'Search failed'
+
+    // Validate query
+    const trimmedQuery = query.trim()
+
+    if (!trimmedQuery) {
+      error = 'Please enter a search term'
+      return
     }
-    isSearching.set(false)
+
+    if (trimmedQuery.length < 2) {
+      error = 'Search term must be at least 2 characters'
+      return
+    }
+
+    if (trimmedQuery.length > 200) {
+      error = 'Search term is too long (maximum 200 characters)'
+      return
+    }
+
+    // Basic XSS prevention - check for suspicious patterns
+    const suspiciousPatterns = /<script|javascript:|onerror=|onclick=/i
+    if (suspiciousPatterns.test(trimmedQuery)) {
+      error = 'Search term contains invalid characters'
+      return
+    }
+
+    isSearching.set(true)
+    jobs.set([])
+
+    try {
+      const res = await searchJobs({
+        text: trimmedQuery,
+        area: area || undefined,
+        schedule: schedule || undefined
+      })
+
+      if (res.success) {
+        const normalizedJobs = res.jobs.map((job) => normalizeJob(job))
+        jobs.set(normalizedJobs)
+
+        if (normalizedJobs.length === 0) {
+          error = 'No jobs found. Try different search terms or location.'
+        }
+      } else {
+        error = res.error || 'Search failed. Please try again.'
+      }
+    } catch (err) {
+      console.error('Search error:', err)
+      error = 'Network error. Please check your connection and try again.'
+    } finally {
+      isSearching.set(false)
+    }
   }
 
   $: selectedCvInfo = $uploadedCv ? {
@@ -32,6 +74,11 @@
   } : null
 
   function chooseJob(job: any) {
+    if (!$uploadedCv) {
+      error = 'Please upload your CV before selecting a job. Go to the Upload page to get started.'
+      return
+    }
+
     clearCustomization()
     const normalized = normalizeJob(job)
     selectedJob.set(normalized)
@@ -43,7 +90,18 @@
 <div class="container mx-auto px-4 py-8 max-w-screen-2xl">
   <h1 class="text-3xl font-bold mb-4">Search Jobs</h1>
 
-  {#if selectedCvInfo}
+  {#if !$uploadedCv}
+    <div class="mb-6 p-6 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-2xl">⚠️</div>
+        <div class="flex-1">
+          <h3 class="font-semibold text-amber-900 mb-1">CV Required</h3>
+          <p class="text-sm text-amber-800">Please upload your CV first to customize applications for specific jobs.</p>
+        </div>
+        <a href="/upload" class="btn btn-primary whitespace-nowrap">Upload CV</a>
+      </div>
+    </div>
+  {:else if selectedCvInfo}
     <div class="mb-6 p-6 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-100">
       <div class="flex items-center gap-4">
         <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">👤</div>
@@ -57,21 +115,37 @@
 
   <div class="card p-8">
     <h2 class="text-2xl font-bold mb-6">Find Your Next Opportunity</h2>
-    <div class="grid md:grid-cols-3 gap-4 mb-6">
-      <div class="md:col-span-2">
+    <div class="space-y-4 mb-6">
+      <div>
         <label class="label" for="search-query">Job Title or Keywords</label>
         <div class="relative">
           <input id="search-query" type="text" bind:value={query} placeholder="e.g. Full Stack Developer, React Engineer" class="input" on:keydown={(e) => e.key==='Enter' && runSearch()} />
         </div>
       </div>
-      <div>
-        <label class="label" for="search-area">Location</label>
-        <div class="relative">
-          <select id="search-area" bind:value={area} class="input">
-            <option value="1">Moscow</option>
-            <option value="2">Saint Petersburg</option>
-            <option value="113">All Russia</option>
-          </select>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <label class="label" for="search-area">Location</label>
+          <div class="relative">
+            <select id="search-area" bind:value={area} class="input">
+              <option value="">Any Location</option>
+              <option value="1">Moscow</option>
+              <option value="2">Saint Petersburg</option>
+              <option value="113">All Russia</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="label" for="search-schedule">Work Schedule</label>
+          <div class="relative">
+            <select id="search-schedule" bind:value={schedule} class="input">
+              <option value="">Any Schedule</option>
+              <option value="remote">Remote</option>
+              <option value="fullDay">Full Day</option>
+              <option value="shift">Shift</option>
+              <option value="flexible">Flexible</option>
+              <option value="flyInFlyOut">Fly-in Fly-out</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>

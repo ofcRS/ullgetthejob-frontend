@@ -1,12 +1,14 @@
 <script lang="ts">
   import { jobs, selectedJob } from '$lib/stores/jobs.store'
   import { uploadedCv, customizedCv, coverLetter, selectedModel } from '$lib/stores/cv.store'
+  import { jobCvStore, currentJobCv } from '$lib/stores/job-cv.store'
   import { customizeCv, submitApplication } from '$lib/api/cv.api'
   import { getJobDetails } from '$lib/api/jobs.api'
   import CoverLetterEditor from '$lib/components/CoverLetterEditor.svelte'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
   import DiffModal from '$lib/components/DiffModal.svelte'
   import { normalizeJob } from '$lib/utils/job'
+  import { calculateSkillMatch } from '$lib/utils/skillMatcher'
   import { get } from 'svelte/store'
   import type { ParsedCV, CustomizedCV, JobItem } from '$lib/types'
 
@@ -25,12 +27,11 @@
   let isSubmitting = false
   let submitError = ''
   let submitSuccess = ''
+  let draftSaveMessage = ''
 
   // Typed non-null views guarded by UI conditions
   $: jobDetailLoading = jobDetailLoadingFor !== null && $selectedJob?.id === jobDetailLoadingFor
   $: selectedJobDescription = $selectedJob?.fullDescription ?? $selectedJob?.description ?? ''
-  $: uploadedCvNN = $uploadedCv as ParsedCV
-  $: customizedCvNN = $customizedCv as CustomizedCV
 
   // Extract all skills from structured response or handle flat array
   $: allJobSkills = (() => {
@@ -51,12 +52,14 @@
   $: isCurrentJobCustomization = $customizedCv && $selectedJob && customizedForJobId === $selectedJob.id
 
   $: matchCalc = (() => {
-    if (isCurrentJobCustomization && allJobSkills.length && $customizedCv?.skills?.length) {
-      const jobSet = new Set(allJobSkills.map((s) => s.toLowerCase()))
-      const cvSet = new Set(($customizedCv.skills || []).map((s) => s.toLowerCase()))
-      const match = [...jobSet].filter((s) => cvSet.has(s))
-      const percent = Math.round((match.length / jobSet.size) * 100)
-      return { match, percent }
+    if (isCurrentJobCustomization && allJobSkills.length && $customizedCv?.skills && $customizedCv.skills.length) {
+      const result = calculateSkillMatch($customizedCv.skills, allJobSkills, 0.8)
+      return {
+        match: result.matched,
+        percent: result.percentage,
+        unmatched: result.unmatched,
+        matchDetails: result.matchDetails
+      }
     }
     return null
   })()
@@ -84,6 +87,14 @@
 
     const res = await customizeCv({ cv: $uploadedCv, jobDescription, model: $selectedModel })
     if (res.success) {
+      // Save to job-specific store to preserve across job switches
+      jobCvStore.setJobData(jobForGeneration.id, {
+        customizedCv: res.customizedCV!,
+        coverLetter: res.coverLetter || '',
+        jobSkills: res.jobSkills || null
+      })
+
+      // Also update global stores for immediate UI updates
       customizedCv.set(res.customizedCV!)
       coverLetter.set(res.coverLetter || '')
       success = `Generated with ${res.modelUsed}!`
@@ -95,22 +106,40 @@
     isGenerating = false
   }
 
-  $: if ($selectedJob && customizedForJobId && customizedForJobId !== $selectedJob.id) {
-    customizedCv.set(null)
-    coverLetter.set('')
-    jobSkills = null
-    customizedForJobId = null
-  }
-
+  // Load job-specific customization when job changes
   $: if ($selectedJob) {
     if (lastSelectedJobId !== $selectedJob.id) {
       jobDetailError = ''
       lastSelectedJobId = $selectedJob.id
+
+      // Load cached customization for this job
+      const cached = $currentJobCv
+      if (cached) {
+        customizedCv.set(cached.customizedCv)
+        coverLetter.set(cached.coverLetter)
+        jobSkills = cached.jobSkills
+        customizedForJobId = $selectedJob.id
+      } else {
+        // No cached customization for this job
+        customizedCv.set(null)
+        coverLetter.set('')
+        jobSkills = null
+        customizedForJobId = null
+      }
+
+      // Fetch job details if needed - properly handle the promise
+      ensureJobDetail($selectedJob).catch((err) => {
+        console.error('Failed to load job details:', err)
+        jobDetailError = err instanceof Error ? err.message : 'Failed to load job details'
+      })
     }
-    void ensureJobDetail($selectedJob)
   } else {
     lastSelectedJobId = null
     jobDetailLoadingFor = null
+    customizedCv.set(null)
+    coverLetter.set('')
+    jobSkills = null
+    customizedForJobId = null
   }
 
   function shouldFetchFullDescription(job: JobItem | null) {
@@ -178,33 +207,130 @@
   }
 
   async function handleApply() {
-    if (!isCurrentJobCustomization || !$selectedJob || !$customizedCv || !$coverLetter) {
-      submitError = 'Missing data to submit application.'
+    // Comprehensive validation before submission
+    submitError = ''
+    submitSuccess = ''
+
+    // Check if job is selected
+    if (!$selectedJob) {
+      submitError = 'No job selected.'
+      return
+    }
+
+    // Check if CV customization exists
+    if (!$customizedCv) {
+      submitError = 'Please generate a customized CV first.'
+      return
+    }
+
+    // Check if customization matches current job
+    if (customizedForJobId !== $selectedJob.id) {
+      submitError = 'CV customization is for a different job. Please regenerate for this position.'
+      return
+    }
+
+    // Validate CV completeness
+    if (!$customizedCv.firstName || !$customizedCv.lastName) {
+      submitError = 'Customized CV is missing your name. Please check your uploaded CV.'
+      return
+    }
+
+    if (!$customizedCv.email) {
+      submitError = 'Customized CV is missing your email address. Please check your uploaded CV.'
+      return
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test($customizedCv.email)) {
+      submitError = 'Email address in CV appears to be invalid.'
+      return
+    }
+
+    // Check if cover letter exists and has minimum length
+    if (!$coverLetter) {
+      submitError = 'Please write a cover letter before submitting.'
+      return
+    }
+
+    const trimmedCoverLetter = $coverLetter.trim()
+    if (trimmedCoverLetter.length < 50) {
+      submitError = 'Cover letter is too short. Please write at least 50 characters.'
+      return
+    }
+
+    // Check if job has external ID for submission
+    if (!$selectedJob.hh_vacancy_id && !$selectedJob.id) {
+      submitError = 'Job posting ID is missing. Cannot submit application.'
       return
     }
 
     isSubmitting = true
-    submitError = ''
-    submitSuccess = ''
 
     try {
       const response = await submitApplication({
         jobExternalId: $selectedJob.hh_vacancy_id || $selectedJob.id,
         customizedCV: $customizedCv,
-        coverLetter: $coverLetter
+        coverLetter: trimmedCoverLetter
       })
 
       if (response.success) {
         submitSuccess = response.message || 'Application submitted successfully!'
+        // Clear the form after successful submission
+        setTimeout(() => {
+          submitSuccess = ''
+        }, 5000)
       } else {
-        submitError = response.error || 'Failed to submit application.'
+        submitError = response.error || 'Failed to submit application. Please try again.'
       }
     } catch (error) {
       console.error('Submit error:', error)
-      submitError = 'Network error during submission.'
+      if (error instanceof Error) {
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          submitError = 'Network error. Please check your connection and try again.'
+        } else {
+          submitError = error.message || 'An error occurred during submission.'
+        }
+      } else {
+        submitError = 'An unexpected error occurred. Please try again.'
+      }
     } finally {
       isSubmitting = false
     }
+  }
+
+  function saveDraft() {
+    draftSaveMessage = ''
+
+    // Check if there's anything to save
+    if (!$selectedJob) {
+      draftSaveMessage = 'No job selected to save draft for'
+      return
+    }
+
+    if (!$customizedCv || !$coverLetter) {
+      draftSaveMessage = 'Generate a customization first before saving draft'
+      return
+    }
+
+    if (customizedForJobId !== $selectedJob.id) {
+      draftSaveMessage = 'Please regenerate CV for this job before saving'
+      return
+    }
+
+    // Save to jobCvStore (already happens automatically, but we can update it)
+    jobCvStore.setJobData($selectedJob.id, {
+      customizedCv: $customizedCv,
+      coverLetter: $coverLetter,
+      jobSkills: jobSkills
+    })
+
+    draftSaveMessage = 'Draft saved successfully! Your work is preserved.'
+
+    // Clear message after 3 seconds
+    setTimeout(() => {
+      draftSaveMessage = ''
+    }, 3000)
   }
 </script>
 
@@ -226,7 +352,9 @@
             <h3 class="font-semibold text-lg">Your Original CV</h3>
             <p class="text-sm text-gray-600">Uploaded version</p>
           </div>
-          <CVDisplay cv={uploadedCvNN} />
+          {#if $uploadedCv}
+            <CVDisplay cv={$uploadedCv} />
+          {/if}
         </div>
       </div>
 
@@ -322,8 +450,8 @@
               </div>
             {/if}
           </div>
-          {#if isCurrentJobCustomization}
-            <CVDisplay cv={customizedCvNN} />
+          {#if isCurrentJobCustomization && $customizedCv}
+            <CVDisplay cv={$customizedCv} />
           {:else if $customizedCv}
             <div class="text-center py-12">
               <div class="mb-4 text-4xl">🔄</div>
@@ -373,6 +501,8 @@
             <span class="text-red-600">❌ {error}</span>
           {:else if success}
             <span class="text-emerald-600">✓ {success}</span>
+          {:else if draftSaveMessage}
+            <span class="text-blue-600">💾 {draftSaveMessage}</span>
           {:else if isCurrentJobCustomization}
             <span class="text-emerald-600">✓ Ready to apply</span>
           {:else if $customizedCv}
@@ -380,7 +510,14 @@
           {/if}
         </div>
         <div class="flex items-center gap-3">
-          <button class="btn btn-secondary">Save Draft</button>
+          <button
+            class="btn btn-secondary"
+            disabled={!isCurrentJobCustomization}
+            on:click={saveDraft}
+            title="Save your customization for later"
+          >
+            Save Draft
+          </button>
           <button class="btn btn-primary" disabled={isGenerating || !$uploadedCv || !$selectedJob} on:click={generate}>
             {isGenerating ? 'Generating...' : (isCurrentJobCustomization ? 'Regenerate' : 'Generate')}
           </button>
@@ -399,10 +536,10 @@
   {/if}
 </div>
 
-{#if isCurrentJobCustomization && $uploadedCv}
-  <DiffModal 
-    original={uploadedCvNN} 
-    customized={customizedCvNN}
+{#if isCurrentJobCustomization && $uploadedCv && $customizedCv}
+  <DiffModal
+    original={$uploadedCv}
+    customized={$customizedCv}
     isOpen={showDiffModal}
     on:close={() => showDiffModal = false}
   />

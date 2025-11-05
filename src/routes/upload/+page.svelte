@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { uploadedCv, selectedModel } from '$lib/stores/cv.store'
   import type { ModelInfo } from '$lib/types'
   import { uploadCv, listCvs } from '$lib/api/cv.api'
-  import { connectWebSocket, clientId as clientIdStore, wsConnection } from '$lib/stores/ws.store'
+  import { connectWebSocket, disconnectWebSocket, clientId as clientIdStore, wsConnection } from '$lib/stores/ws.store'
   import { goto } from '$app/navigation'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
   
@@ -25,12 +25,17 @@
   let hhStatusInterval: ReturnType<typeof setInterval> | null = null
   $: selected = models.find(m => m.id === $selectedModel)
 
+  let wsUnsubscribe: (() => void) | null = null
+
   onMount(() => {
     models = data.models
+
+    // Setup WebSocket with auto-reconnect
     const wsUrl = API.replace('http', 'ws') + '/ws'
     const id = crypto.randomUUID()
-    connectWebSocket(wsUrl, id)
-    const unsub = wsConnection.subscribe((ws) => {
+    connectWebSocket(wsUrl, id, true) // Enable auto-reconnect
+
+    wsUnsubscribe = wsConnection.subscribe((ws) => {
       if (!ws) return
       ws.onmessage = (event) => {
         try {
@@ -38,15 +43,49 @@
           if (msg.type === 'cv_progress') {
             progressStage = msg.stage
           }
-        } catch {}
+        } catch (err) {
+          console.error('WebSocket message error:', err)
+        }
       }
     })
+
+    // Setup HH.ru status polling with visibility change handling
     checkHHStatus()
     hhStatusInterval = setInterval(checkHHStatus, 5 * 60 * 1000)
-    return () => {
-      unsub()
-      if (hhStatusInterval) clearInterval(hhStatusInterval)
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Pause polling when tab is not visible
+        if (hhStatusInterval) {
+          clearInterval(hhStatusInterval)
+          hhStatusInterval = null
+        }
+      } else {
+        // Resume polling when tab becomes visible
+        if (!hhStatusInterval) {
+          checkHHStatus()
+          hhStatusInterval = setInterval(checkHHStatus, 5 * 60 * 1000)
+        }
+      }
     }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      if (hhStatusInterval) {
+        clearInterval(hhStatusInterval)
+        hhStatusInterval = null
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  })
+
+  onDestroy(() => {
+    // Cleanup WebSocket connection on component destroy
+    if (wsUnsubscribe) {
+      wsUnsubscribe()
+    }
+    disconnectWebSocket()
   })
 
   async function loadPreviousCVs() {
@@ -101,51 +140,135 @@
   }
 
   async function importFromHH(resumeId: string) {
+    error = ''
+    success = ''
+    isImporting = true
+
     try {
-      isImporting = true
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
       const res = await fetch(`${API}/api/cv/import/hh/${resumeId}`, {
         method: 'POST',
-        credentials: 'include'
+        credentials: 'include',
+        signal: controller.signal
       })
+
+      clearTimeout(timeoutId)
+
+      if (!res.ok) {
+        throw new Error(`Import failed with status ${res.status}`)
+      }
+
       const data = await res.json()
+
       if (data.success && data.cv) {
         uploadedCv.set(data.cv)
         showPreview = true
-        success = 'Imported resume from HH.ru successfully!'
+        success = 'Imported resume from HH.ru successfully! You can now search for jobs.'
+        await loadPreviousCVs()
       } else {
-        error = data.error || 'Failed to import resume'
+        error = data.error || 'Failed to import resume. Please try again.'
       }
-    } catch (e) {
-      error = 'Network error during import'
+    } catch (err) {
+      console.error('Import error:', err)
+
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          error = 'Import timed out. Please try again.'
+        } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          error = 'Network error. Please check your connection and try again.'
+        } else {
+          error = err.message || 'Failed to import resume. Please try again.'
+        }
+      } else {
+        error = 'An unexpected error occurred during import.'
+      }
     } finally {
       isImporting = false
     }
   }
 
   async function handleFileUpload(e: Event) {
-    const input = e.target as HTMLInputElement
+    if (!(e.target instanceof HTMLInputElement)) return
+    const input = e.target
     if (!input.files?.[0]) return
     const file = input.files[0]
+
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024
+    if (file.size > maxSize) {
+      error = 'File size exceeds 10MB limit. Please upload a smaller file.'
+      return
+    }
+
+    // Validate file type
+    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    if (!allowedTypes.includes(file.type)) {
+      error = 'Invalid file type. Please upload a PDF, DOC, or DOCX file.'
+      return
+    }
+
     error = ''
     success = ''
     isUploading = true
-    let cid = ''
-    clientIdStore.subscribe((v) => cid = v)()
-    const form = new FormData()
-    form.append('file', file)
-    form.append('clientId', cid)
-    const api = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-    const res = await fetch(`${api}/api/cv/upload`, { method: 'POST', body: form }).then(r => r.json())
-    if (res.success && res.cv) {
-      uploadedCv.set(res.cv)
-      success = 'CV uploaded and parsed successfully with AI!'
-      showPreview = true
-      await loadPreviousCVs()
-      setTimeout(() => goto('/cv'), 400)
-    } else {
-      error = res.error || 'Upload failed'
+    progressStage = 'Uploading file...'
+
+    try {
+      let cid = ''
+      clientIdStore.subscribe((v) => cid = v)()
+
+      const form = new FormData()
+      form.append('file', file)
+      form.append('clientId', cid)
+
+      const api = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+
+      // Create abort controller for timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 second timeout
+
+      const response = await fetch(`${api}/api/cv/upload`, {
+        method: 'POST',
+        body: form,
+        signal: controller.signal
+      })
+
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        throw new Error(`Upload failed with status ${response.status}`)
+      }
+
+      const res = await response.json()
+
+      if (res.success && res.cv) {
+        uploadedCv.set(res.cv)
+        success = 'CV uploaded and parsed successfully! You can now search for jobs.'
+        showPreview = true
+        await loadPreviousCVs()
+        // Remove auto-navigation - let user stay on page to see preview
+      } else {
+        error = res.error || 'Upload failed. Please try again.'
+      }
+    } catch (err) {
+      console.error('Upload error:', err)
+
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          error = 'Upload timed out after 60 seconds. Please check your connection and try again.'
+        } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          error = 'Network error. Please check your internet connection and try again.'
+        } else {
+          error = err.message || 'Upload failed. Please try again.'
+        }
+      } else {
+        error = 'An unexpected error occurred. Please try again.'
+      }
+    } finally {
+      isUploading = false
+      progressStage = ''
     }
-    isUploading = false
   }
 </script>
 
