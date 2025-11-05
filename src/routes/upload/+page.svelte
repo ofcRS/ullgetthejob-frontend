@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { uploadedCv, selectedModel } from '$lib/stores/cv.store'
   import type { ModelInfo } from '$lib/types'
   import { uploadCv, listCvs } from '$lib/api/cv.api'
-  import { connectWebSocket, clientId as clientIdStore, wsConnection } from '$lib/stores/ws.store'
+  import { connectWebSocket, disconnectWebSocket, clientId as clientIdStore, wsConnection } from '$lib/stores/ws.store'
   import { goto } from '$app/navigation'
   import CVDisplay from '$lib/components/CVDisplay.svelte'
   
@@ -25,12 +25,17 @@
   let hhStatusInterval: ReturnType<typeof setInterval> | null = null
   $: selected = models.find(m => m.id === $selectedModel)
 
+  let wsUnsubscribe: (() => void) | null = null
+
   onMount(() => {
     models = data.models
+
+    // Setup WebSocket with auto-reconnect
     const wsUrl = API.replace('http', 'ws') + '/ws'
     const id = crypto.randomUUID()
-    connectWebSocket(wsUrl, id)
-    const unsub = wsConnection.subscribe((ws) => {
+    connectWebSocket(wsUrl, id, true) // Enable auto-reconnect
+
+    wsUnsubscribe = wsConnection.subscribe((ws) => {
       if (!ws) return
       ws.onmessage = (event) => {
         try {
@@ -38,15 +43,49 @@
           if (msg.type === 'cv_progress') {
             progressStage = msg.stage
           }
-        } catch {}
+        } catch (err) {
+          console.error('WebSocket message error:', err)
+        }
       }
     })
+
+    // Setup HH.ru status polling with visibility change handling
     checkHHStatus()
     hhStatusInterval = setInterval(checkHHStatus, 5 * 60 * 1000)
-    return () => {
-      unsub()
-      if (hhStatusInterval) clearInterval(hhStatusInterval)
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Pause polling when tab is not visible
+        if (hhStatusInterval) {
+          clearInterval(hhStatusInterval)
+          hhStatusInterval = null
+        }
+      } else {
+        // Resume polling when tab becomes visible
+        if (!hhStatusInterval) {
+          checkHHStatus()
+          hhStatusInterval = setInterval(checkHHStatus, 5 * 60 * 1000)
+        }
+      }
     }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      if (hhStatusInterval) {
+        clearInterval(hhStatusInterval)
+        hhStatusInterval = null
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  })
+
+  onDestroy(() => {
+    // Cleanup WebSocket connection on component destroy
+    if (wsUnsubscribe) {
+      wsUnsubscribe()
+    }
+    disconnectWebSocket()
   })
 
   async function loadPreviousCVs() {
