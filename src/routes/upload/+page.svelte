@@ -123,7 +123,8 @@
   }
 
   async function handleFileUpload(e: Event) {
-    const input = e.target as HTMLInputElement
+    if (!(e.target instanceof HTMLInputElement)) return
+    const input = e.target
     if (!input.files?.[0]) return
     const file = input.files[0]
     error = ''

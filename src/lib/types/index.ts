@@ -40,4 +40,38 @@ export interface ModelInfo {
   pricing?: any
 }
 
+// Raw job data from HH.ru API
+export interface RawJobData {
+  id?: string
+  hh_vacancy_id?: string
+  hhVacancyId?: string
+  title?: string
+  name?: string
+  company?: string
+  company_name?: string
+  employer?: {
+    name?: string
+  }
+  salary?: string
+  area?: string | { name?: string }
+  area_name?: string
+  description?: string
+  descriptionPreview?: string
+  description_preview?: string
+  fullDescription?: string
+  full_description?: string
+  description_full?: string
+  url?: string
+  alternate_url?: string
+  skills?: string[]
+  has_test?: boolean
+  test_required?: boolean
+  fullDescriptionLoaded?: boolean
+  full_description_loaded?: boolean
+  snippet?: {
+    requirement?: string
+    responsibility?: string
+  }
+}
+
 

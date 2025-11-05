@@ -29,8 +29,6 @@
   // Typed non-null views guarded by UI conditions
   $: jobDetailLoading = jobDetailLoadingFor !== null && $selectedJob?.id === jobDetailLoadingFor
   $: selectedJobDescription = $selectedJob?.fullDescription ?? $selectedJob?.description ?? ''
-  $: uploadedCvNN = $uploadedCv as ParsedCV
-  $: customizedCvNN = $customizedCv as CustomizedCV
 
   // Extract all skills from structured response or handle flat array
   $: allJobSkills = (() => {
@@ -51,9 +49,9 @@
   $: isCurrentJobCustomization = $customizedCv && $selectedJob && customizedForJobId === $selectedJob.id
 
   $: matchCalc = (() => {
-    if (isCurrentJobCustomization && allJobSkills.length && $customizedCv?.skills?.length) {
+    if (isCurrentJobCustomization && allJobSkills.length && $customizedCv?.skills && $customizedCv.skills.length) {
       const jobSet = new Set(allJobSkills.map((s) => s.toLowerCase()))
-      const cvSet = new Set(($customizedCv.skills || []).map((s) => s.toLowerCase()))
+      const cvSet = new Set($customizedCv.skills.map((s) => s.toLowerCase()))
       const match = [...jobSet].filter((s) => cvSet.has(s))
       const percent = Math.round((match.length / jobSet.size) * 100)
       return { match, percent }
@@ -226,7 +224,9 @@
             <h3 class="font-semibold text-lg">Your Original CV</h3>
             <p class="text-sm text-gray-600">Uploaded version</p>
           </div>
-          <CVDisplay cv={uploadedCvNN} />
+          {#if $uploadedCv}
+            <CVDisplay cv={$uploadedCv} />
+          {/if}
         </div>
       </div>
 
@@ -322,8 +322,8 @@
               </div>
             {/if}
           </div>
-          {#if isCurrentJobCustomization}
-            <CVDisplay cv={customizedCvNN} />
+          {#if isCurrentJobCustomization && $customizedCv}
+            <CVDisplay cv={$customizedCv} />
           {:else if $customizedCv}
             <div class="text-center py-12">
               <div class="mb-4 text-4xl">🔄</div>
@@ -399,10 +399,10 @@
   {/if}
 </div>
 
-{#if isCurrentJobCustomization && $uploadedCv}
-  <DiffModal 
-    original={uploadedCvNN} 
-    customized={customizedCvNN}
+{#if isCurrentJobCustomization && $uploadedCv && $customizedCv}
+  <DiffModal
+    original={$uploadedCv}
+    customized={$customizedCv}
     isOpen={showDiffModal}
     on:close={() => showDiffModal = false}
   />
