@@ -1,16 +1,14 @@
 import type { ModelInfo } from '$lib/types'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+import { apiClient, APIError } from './client'
 
 export async function fetchModels(): Promise<ModelInfo[]> {
-  try {
-    const res = await fetch(`${API_URL}/api/models`)
-    if (!res.ok) return []
-    const data = await res.json()
-    return data.models || []
-  } catch {
-    return []
-  }
+	try {
+		const result = await apiClient.get<{ models: ModelInfo[] }>('/api/models')
+		return result.models || []
+	} catch (error) {
+		console.error('Failed to fetch models:', error)
+		return []
+	}
 }
 
 
