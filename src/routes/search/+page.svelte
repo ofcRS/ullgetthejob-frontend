@@ -3,6 +3,8 @@
   import JobCard from '$lib/components/JobCard.svelte'
   import { searchJobs } from '$lib/api/jobs.api'
   import { uploadedCv, clearCustomization } from '$lib/stores/cv.store'
+  import { selectedJobIds } from '$lib/stores/queue.store'
+  import { addToQueue } from '$lib/api/queue.api'
   import { goto } from '$app/navigation'
   import { normalizeJob } from '$lib/utils/job'
 
@@ -10,6 +12,8 @@
   let area = '1'
   let schedule = 'remote'
   let error = ''
+  let selectMode = false
+  let isAddingToQueue = false
 
   async function runSearch() {
     error = ''
@@ -84,6 +88,67 @@
     selectedJob.set(normalized)
     jobs.update((items) => items.map((item) => (item.id === normalized.id ? normalized : item)))
     goto('/jobs')
+  }
+
+  function toggleSelectMode() {
+    selectMode = !selectMode
+    if (!selectMode) {
+      selectedJobIds.set(new Set())
+    }
+  }
+
+  function toggleJobSelection(jobId: string) {
+    selectedJobIds.update(ids => {
+      const newIds = new Set(ids)
+      if (newIds.has(jobId)) {
+        newIds.delete(jobId)
+      } else {
+        newIds.add(jobId)
+      }
+      return newIds
+    })
+  }
+
+  function selectAll() {
+    selectedJobIds.set(new Set($jobs.map(j => j.id)))
+  }
+
+  function clearSelection() {
+    selectedJobIds.set(new Set())
+  }
+
+  async function addSelectedToQueue() {
+    if (!$uploadedCv) {
+      error = 'Please upload your CV first'
+      return
+    }
+
+    if ($selectedJobIds.size === 0) {
+      error = 'No jobs selected'
+      return
+    }
+
+    isAddingToQueue = true
+    error = ''
+
+    // We need to get the CV ID - for now we'll use a placeholder
+    // In a real implementation, you'd have the CV ID stored with the uploadedCv
+    const cvId = 'default-cv-id' // TODO: Get actual CV ID from uploadedCv
+
+    const result = await addToQueue(
+      Array.from($selectedJobIds),
+      cvId
+    )
+
+    if (result.success) {
+      selectedJobIds.set(new Set())
+      selectMode = false
+      goto('/queue')
+    } else {
+      error = result.error || 'Failed to add jobs to queue'
+    }
+
+    isAddingToQueue = false
   }
 </script>
 
@@ -161,12 +226,67 @@
   {#if $jobs.length > 0}
     <div class="mt-8">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-xl font-semibold">{$jobs.length} jobs found</h3>
-        <button class="text-sm text-blue-600 hover:text-blue-700">Sort by relevance ▾</button>
+        <div class="flex items-center gap-3">
+          <h3 class="text-xl font-semibold">{$jobs.length} jobs found</h3>
+
+          <button
+            class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-sm"
+            on:click={toggleSelectMode}
+          >
+            {selectMode ? 'Cancel' : 'Select Multiple'}
+          </button>
+
+          {#if selectMode}
+            <span class="text-sm text-gray-600">
+              {$selectedJobIds.size} selected
+            </span>
+
+            <button
+              class="text-sm text-blue-600 hover:text-blue-700"
+              on:click={selectAll}
+            >
+              Select All
+            </button>
+
+            {#if $selectedJobIds.size > 0}
+              <button
+                class="text-sm text-red-600 hover:text-red-700"
+                on:click={clearSelection}
+              >
+                Clear
+              </button>
+            {/if}
+          {/if}
+        </div>
+
+        {#if selectMode && $selectedJobIds.size > 0}
+          <button
+            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            disabled={isAddingToQueue}
+            on:click={addSelectedToQueue}
+          >
+            {isAddingToQueue ? 'Adding...' : `Add ${$selectedJobIds.size} to Queue`}
+          </button>
+        {/if}
       </div>
+
       <div class="grid md:grid-cols-2 gap-6">
         {#each $jobs as job}
-          <button class="text-left group transform hover:-translate-y-1 transition-all duration-200" on:click={() => chooseJob(job)}>
+          <button
+            class="text-left group transform hover:-translate-y-1 transition-all duration-200 relative"
+            on:click={() => selectMode ? toggleJobSelection(job.id) : chooseJob(job)}
+          >
+            {#if selectMode}
+              <div class="absolute top-4 right-4 z-10">
+                <input
+                  type="checkbox"
+                  checked={$selectedJobIds.has(job.id)}
+                  class="w-5 h-5 text-blue-600 rounded"
+                  on:click|stopPropagation={() => toggleJobSelection(job.id)}
+                />
+              </div>
+            {/if}
+
             <JobCard {job} />
           </button>
         {/each}
