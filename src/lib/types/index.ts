@@ -74,4 +74,60 @@ export interface RawJobData {
   }
 }
 
+export interface QueuedJob {
+  id: string
+  workflowId: string
+  userId: string
+  cvId: string
+  jobId?: string
+  jobExternalId: string
+  status: 'pending' | 'customizing' | 'ready' | 'submitting' | 'submitted' | 'failed' | 'rate_limited'
+  priority: number
+  attempts: number
+  nextRunAt: string
+  lastError?: string
+  createdAt: string
+  updatedAt: string
+  payload?: {
+    jobTitle?: string
+    company?: string
+    addedAt?: string
+  }
+  job?: JobItem
+  customCv?: {
+    id: string
+    customizedData: any
+    coverLetter: string
+  }
+}
+
+export interface ApplicationStatus {
+  id: string
+  jobTitle: string
+  company: string
+  status: string
+  submittedAt?: string
+  errorMessage?: string
+  hhStatus?: string
+  hhNegotiationId?: string
+  coverLetter?: string
+  createdAt: string
+}
+
+export interface RateLimitStatus {
+  tokens: number
+  capacity: number
+  nextRefill: string
+  canApply: boolean
+  applicationsToday?: number
+}
+
+export interface WorkflowProgress {
+  workflowId: string
+  completed: number
+  total: number
+  currentJob?: string
+  estimatedCompletion?: string
+}
+
 
