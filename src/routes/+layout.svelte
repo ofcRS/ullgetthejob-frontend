@@ -101,6 +101,7 @@
             <a href="/queue" class="hover:text-blue-600 transition-colors">Queue</a>
             <a href="/applications" class="hover:text-blue-600 transition-colors">Applications</a>
             <a href="/dashboard" class="hover:text-blue-600 transition-colors">Dashboard</a>
+            <a href="/analytics" class="hover:text-blue-600 transition-colors">Analytics</a>
           </nav>
         </div>
         <div class="flex items-center gap-2">
