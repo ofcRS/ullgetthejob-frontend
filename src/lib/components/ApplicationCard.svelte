@@ -12,7 +12,7 @@
     : new Date(application.createdAt).toLocaleDateString()
 
   function getStatusColor(status: string) {
-    const colors = {
+    const colors: Record<string, string> = {
       pending: 'text-amber-600 bg-amber-50',
       submitted: 'text-emerald-600 bg-emerald-50',
       failed: 'text-red-600 bg-red-50',

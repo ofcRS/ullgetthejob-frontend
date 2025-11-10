@@ -4,7 +4,10 @@
   import StepIndicator from '$lib/components/StepIndicator.svelte'
   import { page } from '$app/stores'
   import GlobalSettings from '$lib/components/GlobalSettings.svelte'
-  import { connectWebSocket, disconnectWebSocket } from '$lib/stores/websocket.store'
+  import FeedbackToast from '$lib/components/FeedbackToast.svelte'
+  import { connectWebSocket, disconnectWebSocket, websocketStore } from '$lib/stores/websocket.store'
+  import { updateProgress } from '$lib/stores/feedback.store'
+  import type { ProgressUpdate } from '$lib/types'
 
   const USER_ID = 'test_user' // TODO: Replace with actual user ID from auth
 
@@ -20,6 +23,54 @@
   onMount(() => {
     // Connect WebSocket for real-time updates
     connectWebSocket(USER_ID)
+
+    // Subscribe to WebSocket messages for progress updates
+    const unsubscribe = websocketStore.subscribe((message) => {
+      if (!message) return
+
+      // Handle cv_progress events
+      if (message.type === 'cv_progress') {
+        const progress: ProgressUpdate = {
+          taskId: message.jobId || message.cvId || 'cv-task',
+          taskType: 'cv_customize',
+          progress: message.progress || 0,
+          status: message.status === 'completed' ? 'completed' : message.status === 'error' ? 'failed' : 'in_progress',
+          message: message.message || 'Customizing CV...',
+          details: message
+        }
+        updateProgress(progress)
+      }
+
+      // Handle application_progress events
+      if (message.type === 'application_progress') {
+        const progress: ProgressUpdate = {
+          taskId: message.applicationId || 'app-task',
+          taskType: 'application_submit',
+          progress: message.progress || 0,
+          status: message.status === 'submitted' ? 'completed' : message.status === 'failed' ? 'failed' : 'in_progress',
+          message: message.message || 'Submitting application...',
+          details: message
+        }
+        updateProgress(progress)
+      }
+
+      // Handle batch processing events
+      if (message.type === 'batch_progress') {
+        const progress: ProgressUpdate = {
+          taskId: message.workflowId || 'batch-task',
+          taskType: 'batch_process',
+          progress: message.progress || 0,
+          status: message.status === 'completed' ? 'completed' : message.status === 'failed' ? 'failed' : 'in_progress',
+          message: message.message || 'Processing batch...',
+          details: message
+        }
+        updateProgress(progress)
+      }
+    })
+
+    return () => {
+      unsubscribe()
+    }
   })
 
   onDestroy(() => {
@@ -33,4 +84,5 @@
     <slot />
   </div>
   <GlobalSettings />
+  <FeedbackToast />
   </div>

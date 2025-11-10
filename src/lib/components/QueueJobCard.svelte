@@ -9,7 +9,7 @@
   $: statusBadge = getStatusBadge(job.status)
 
   function getStatusBadge(status: string) {
-    const badges = {
+    const badges: Record<string, { color: string; icon: string; label: string }> = {
       pending: { color: 'bg-gray-100 text-gray-700', icon: '⏳', label: 'Pending' },
       customizing: { color: 'bg-blue-100 text-blue-700', icon: '🎨', label: 'Customizing' },
       ready: { color: 'bg-indigo-100 text-indigo-700', icon: '✅', label: 'Ready' },
