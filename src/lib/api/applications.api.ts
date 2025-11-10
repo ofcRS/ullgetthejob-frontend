@@ -36,10 +36,9 @@ export async function getApplications(filters?: {
   error?: string
 }> {
   try {
-    const params = new URLSearchParams({
-      userId: getUserId(),
-      ...(filters || {})
-    })
+    const params = new URLSearchParams({ userId: getUserId() })
+    if (filters?.status) params.append('status', filters.status)
+    if (filters?.limit) params.append('limit', filters.limit.toString())
     return await apiClient.get(`/api/application?${params}`)
   } catch (error) {
     return {

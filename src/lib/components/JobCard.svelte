@@ -1,14 +1,26 @@
 <script lang="ts">
-  import type { JobItem } from '$lib/types'
+  import type { JobItem, MatchScore } from '$lib/types'
+  import MatchScoreBadge from './MatchScoreBadge.svelte'
+
   export let job: JobItem
+  export let matchScore: MatchScore | undefined = undefined
+  export let showMatchDetails = false
 </script>
 
 <div class="card text-left bg-white hover:shadow-lg transition-all">
-  <h3 class="font-semibold text-lg text-gray-900 mb-2">{job.title}
-    {#if job.has_test}
-      <span class="ml-2 px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded">Test Required</span>
+  <div class="flex items-start justify-between gap-2 mb-2">
+    <h3 class="font-semibold text-lg text-gray-900 flex-1">
+      {job.title}
+      {#if job.has_test}
+        <span class="ml-2 px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded">Test Required</span>
+      {/if}
+    </h3>
+    {#if matchScore}
+      <div class="flex-shrink-0">
+        <MatchScoreBadge score={matchScore} size="md" showDetails={showMatchDetails} />
+      </div>
     {/if}
-  </h3>
+  </div>
   <p class="text-gray-700 mb-2">{job.company}</p>
   <div class="flex flex-wrap gap-2 text-sm text-gray-600">
     {#if job.salary}
