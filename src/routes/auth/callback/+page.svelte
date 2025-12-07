@@ -1,47 +1,46 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { page } from '$app/stores'
   import { goto } from '$app/navigation'
 
   const API = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-  let status = 'Connecting to HH.ru...'
-  let error = ''
 
-  onMount(async () => {
-    const url = new URL(window.location.href)
-    const code = url.searchParams.get('code')
-    if (!code) {
-      error = 'Missing authorization code'
-      status = ''
+  onMount(() => {
+    // Get OAuth code and state from URL params
+    const urlParams = new URLSearchParams(window.location.search)
+    const code = urlParams.get('code')
+    const state = urlParams.get('state')
+    const error = urlParams.get('error')
+
+    if (error) {
+      // OAuth error from HH.ru
+      console.error('OAuth error:', error)
+      goto(`/upload?error=${encodeURIComponent(error)}`)
       return
     }
-    try {
-      const res = await fetch(`${API}/api/auth/hh/callback?code=${encodeURIComponent(code)}`, {
-        credentials: 'include'
-      })
-      const data = await res.json()
-      if (data.success) {
-        status = 'HH.ru connected!'
-        setTimeout(() => goto('/upload'), 700)
-      } else {
-        error = data.error || 'Failed to connect HH.ru'
-        status = ''
-      }
-    } catch (e) {
-      error = 'Network error during HH callback'
-      status = ''
+
+    if (!code) {
+      // Missing code parameter
+      console.error('Missing OAuth code')
+      goto('/upload?error=missing_code')
+      return
     }
+
+    // Redirect to API callback with code and state
+    const callbackUrl = new URL(`${API}/api/auth/hh/callback`)
+    callbackUrl.searchParams.set('code', code)
+    if (state) {
+      callbackUrl.searchParams.set('state', state)
+    }
+
+    // Use window.location to ensure cookies are properly set
+    window.location.href = callbackUrl.toString()
   })
 </script>
 
-<div class="container mx-auto px-4 py-8 max-w-screen-sm">
-  <h1 class="text-2xl font-bold mb-4">HH.ru Connection</h1>
-  {#if status}
-    <p class="text-gray-700">{status}</p>
-  {/if}
-  {#if error}
-    <p class="text-red-600">{error}</p>
-  {/if}
+<div class="min-h-screen flex items-center justify-center">
+  <div class="text-center">
+    <div class="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent mb-4"></div>
+    <h2 class="text-xl font-semibold text-gray-900">Connecting to HH.ru...</h2>
+    <p class="text-gray-600 mt-2">Please wait while we complete the authentication</p>
+  </div>
 </div>
-
-
