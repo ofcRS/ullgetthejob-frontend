@@ -31,6 +31,27 @@
   onMount(() => {
     models = data.models
 
+    // Check for OAuth callback results in URL params
+    const urlParams = new URLSearchParams(window.location.search)
+    const hhConnectedParam = urlParams.get('hh_connected')
+    const errorParam = urlParams.get('error')
+
+    if (hhConnectedParam === 'true') {
+      success = 'Successfully connected to HH.ru! You can now import your resumes.'
+      checkHHStatus() // Refresh HH status immediately
+      // Clean up URL
+      window.history.replaceState({}, '', '/upload')
+    } else if (errorParam) {
+      const errorMessages: Record<string, string> = {
+        'missing_code': 'OAuth callback failed: missing authorization code',
+        'unauthorized': 'Failed to authenticate with HH.ru. Please try again.',
+        'connection_failed': 'Failed to connect to HH.ru. Please try again later.'
+      }
+      error = errorMessages[errorParam] || `Connection error: ${errorParam}`
+      // Clean up URL
+      window.history.replaceState({}, '', '/upload')
+    }
+
     // Setup WebSocket with auto-reconnect
     const wsUrl = API.replace('http', 'ws') + '/ws'
     const id = crypto.randomUUID()
