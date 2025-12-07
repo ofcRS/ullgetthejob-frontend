@@ -131,12 +131,22 @@
   }
 
   async function connectHH() {
-    const res = await fetch(`${API}/api/auth/hh/login`, {
-      credentials: 'include'
-    })
-    const data = await res.json()
-    if (data?.url) {
-      window.location.href = data.url
+    try {
+      error = ''
+      const res = await fetch(`${API}/api/auth/hh/login`, {
+        credentials: 'include'
+      })
+      const data = await res.json()
+      console.log('HH login response:', data)
+      if (data?.url) {
+        window.location.href = data.url
+      } else {
+        error = 'Failed to get HH.ru login URL. Please try again.'
+        console.error('No URL in response:', data)
+      }
+    } catch (err) {
+      console.error('Connect HH error:', err)
+      error = 'Failed to connect to HH.ru. Please try again.'
     }
   }
 
