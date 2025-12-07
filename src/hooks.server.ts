@@ -49,10 +49,10 @@ const securityHandle: Handle = async ({ event, resolve }) => {
 			"style-src 'self' 'unsafe-inline'",
 			"img-src 'self' data: https:",
 			"font-src 'self' data:",
-			"connect-src 'self' ws: wss:",
+			`connect-src 'self' ${API_URL} ws://localhost:3000 wss://localhost:3000 ws: wss:`,
 			"frame-ancestors 'none'",
 			"base-uri 'self'",
-			"form-action 'self'"
+			"form-action 'self' https://hh.ru"
 		].join('; ')
 	)
 
